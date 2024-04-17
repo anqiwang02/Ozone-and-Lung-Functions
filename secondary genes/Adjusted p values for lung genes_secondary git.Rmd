@@ -1,0 +1,176 @@
+---
+title: "Adjusted p values for lung function genes(T-paired) for github"
+output: html_notebook
+---
+
+
+#load library
+```{r}
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(writexl)
+library(readxl)
+
+library(purrr)
+
+rm(list=ls()) 
+```
+
+#Load data
+```{r}
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary genes/Exp_data_secondary_CpG.RData")
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+#W0.true is a matrix that represents all possible randomizations of paired data of 17 individuals
+
+#let's call the final_secondary_CpG to be final
+final <- final_secondary_CpG
+
+```
+
+#For secondary gene list
+```{r}
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary genes/secondary gene and CPG.RData") #this data default name is df
+
+df1 <- df %>% select(1) 
+
+row <-nrow(df)
+nrow(w0.true)
+
+```
+
+#calculate the observed unadjusted fisher-exact p-value for secondary genes
+```{r}
+test_stat <- list() #every CpG site has all possible 131072 test statistics
+ob_stat <- matrix(nrow=row, ncol=1) #every CpG only has one observed statistics; so total of row=283 number of observed statistics for secondary gene list
+unadjust_p <-matrix(nrow=row, ncol=1) #every CpG site only has one p value
+
+for(h in 1:row){ #h represents the number of cpg column values
+   test_stat[[h]] <-abs(w0.true%*%as.matrix(final[,h+4])/17)  #store all possible test statistics of each column inside a list of subjects
+  ob_stat[h,1]<-abs(t(final$exp)%*%as.matrix(final[,h+4])/17) #store observed test statistics of each column
+  unadjust_p[h,1]<-colSums((1*(sapply(seq_along(ob_stat[h,1]), function(x, y, i) y[i] <= x[,i], y = ob_stat[h,1] ,x = test_stat[[h]])))/2^17) #p-value, comparing one observed statistics (y) with the entire corresponding column of test statistics x for each CpG site
+}
+
+```
+
+# To adjust for p-values
+# calculate all the test statistics for each CpG site using the first 1000 iterations of W0 true
+```{r}
+#we only consider the first 1000 randomizations. Select the first n rows of w0.true (randomization matrix)
+n=1000
+w0.true1 <- w0.true[c(1:n),]
+
+test_stat1000 <- list() #every row has 1000 out of 131072 test statistics
+
+for(h in 1:row){ 
+  test_stat1000[[h]]<-abs(w0.true1%*%as.matrix(final[,h+4])/17)  #store all possible test statistics of each column inside a list of subjects
+}
+```
+
+
+```{r}
+#add all possible test statistics from each CpG together in the same data frame
+all_stat1<- cbind(unlist(test_stat1000))
+
+all_stat <- na.omit(all_stat1) #check for na values
+  
+k <- nrow(all_stat) #all_stat1 has k rows
+
+```
+
+
+
+```{r}
+#create a matrix for all p values of all possible observed test statistics
+p_matrix <- matrix(nrow=k, ncol=1)
+
+#pretend every row in all_stat is observed stat, and calculate p value for each of them
+for(i in 1:k) {
+   #all_stat is all possible test statistics 
+   b<- all_stat[i,1] #observed statistics
+  p_value <- 1*sum(all_stat>=b)/k
+  p_matrix[i,1] <- p_value
+  print(i)
+  }
+
+
+#split the p-matrix by column cpg values, every 1000 test statistics corresponds to a CpG site
+split_p <- split(p_matrix, ceiling(seq_along(p_matrix)/n)) #A one-liner splitting p_matrix into chunks of size n(number of rows in W0.rep)=1000:
+
+z <- length(split_p)
+```
+
+
+```{r}
+#store all minimum p values 
+min <- matrix(nrow=n, ncol=1)
+
+#store all corresponding elements in a matrix, and we will have 283=z matrixes in the end
+mat1<- matrix(nrow=z , ncol=1)
+mat <- list()
+
+for (i in 1:n){ #n is number of elements in each list
+   for (x in 1:z){ #z is number of lists
+   mat1[x,1] <- split_p[[x]][i] #e.g. first elements of all lists will store in one list
+   }
+  mat[[i]] <- mat1 #end of step 2 where we make the list from the value from the same iteration of each list 
+  min[i,1]<-min(mat[[i]]) #find the minimum of each list in mat
+}
+
+
+#min(mat[[1]])
+
+#split_p[[1]][3] #access the first element of the first list
+
+```
+
+```{r}
+min <- as.data.frame(min)
+```
+
+```{r}
+library(esquisse)
+esquisser(min)
+```
+
+#graph distribution of minimum p-values
+```{r}
+ggplot(min) +
+  aes(x = V1) +
+  geom_histogram(bins = 93L, fill = "#5977AD") +
+  labs(
+    x = "Minimum p-values",
+    title = "Distribution of \"minimum p-values\""
+  ) +
+  theme_linedraw()
+```
+
+
+
+#step 3: calculate the adjusted p values for the observed test statistics. All observed test statistics for each hypothesis are stored in ob_stat. Find the proportion of values in matrix min (minimum p value distribution) that are less than or equal to each value in the observed test statistics for each hypothesis, then that proportion is the adjusted p value
+```{r}
+# adjust p values for 283 hypothesis
+
+adjust_p <- matrix(nrow=x, ncol=1)
+
+for (i in 1:x){
+  adjust_p[i, 1] <- 1*sum(min<=unadjust_p[i,1])/n #n is the number of values in the distribution of matrix min
+}
+
+adjust_p <- as.data.frame(adjust_p)
+
+min(adjust_p)
+
+min(unadjust_p)
+```
+
+
+# full join lung_genes with adjusted p value, and unadjusted p values
+```{r}
+lung_genes_secondary_adjust_p <-
+  adjust_p %>% cbind(df) %>% rename(adjusted_p_value=".",CpG =Illumina, gene_name = X.19) %>%cbind(unadjust_p) %>% select(2,3,5,1) %>% arrange(unadjust_p)
+
+#save adjusted p-value files
+write_xlsx(lung_genes_secondary_adjust_p,"/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary genes/adjusted p values for secondary lung genes.xlsx")
+```
+
