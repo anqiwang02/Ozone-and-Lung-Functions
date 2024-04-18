@@ -1,5 +1,5 @@
 ---
-title: "Analysis for primary lung function genes(T-paired) for github"
+title: "Analysis for secondary lung function genes(T-paired) for github"
 output: html_notebook
 ---
 
@@ -19,37 +19,34 @@ rm(list=ls())
 
 #Load data
 ```{r}
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary genes/Exp_data_secondary_CpG.RData")
 load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
 #W0.true is a matrix that represents all possible randomizations of paired data of 17 individuals
 
-#let's call the final_primary_CpG to be final
-final <- final_primary_CpG
+#let's call the final_secondary_CpG to be final
+final <- final_secondary_CpG
 
 ```
 
-#For primary gene list
+#For secondary gene list
 ```{r}
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/primary gene and CPG updated.RData") #this data default name is df_primary
-df<-df_primary #call df_primary to be df instead
-
-df1 <- df %>% select(1) 
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary genes/secondary gene and CPG.RData") #this data default name is df
 
 row <-nrow(df)
 nrow(w0.true)
 
 ```
 
-#Section 1: calculate the observed unadjusted fisher-exact p-value for primary genes
+#Section 1: calculate the observed unadjusted fisher-exact p-value for secondary genes
 ```{r}
 test_stat <- list() #every CpG site has all possible 131072 test statistics
-ob_stat <- matrix(nrow=row, ncol=1) #every CpG only has one observed statistics; so total of row=232 number of observed statistics for primary gene list
+ob_stat <- matrix(nrow=row, ncol=1) #every CpG only has one observed statistics; so total of row=283 number of observed statistics for secondary gene list
 unadjust_p <-matrix(nrow=row, ncol=1) #every CpG site only has one p value
 
 for(h in 1:row){ #h represents the number of cpg column values
    test_stat[[h]] <-abs(w0.true%*%as.matrix(final[,h+4])/17)  #store all possible test statistics of each column inside a list of subjects
   ob_stat[h,1]<-abs(t(final$exp)%*%as.matrix(final[,h+4])/17) #store observed test statistics of each column
-  unadjust_p[h,1]<-colSums((1*(sapply(seq_along(ob_stat[h,1]), function(x, y, i) y[i] <= x[,i], y = ob_stat[h,1] ,x = test_stat[[h]])))/2^17) #p-value, comparing one observed statistics (y) with the entire corresponding column of test statistics x for each CpG site
+  unadjust_p[h,1]<-colSums((1*(sapply(seq_along(ob_stat[h,1]), function(x, y, i) y[i] <= x[,i], y = ob_stat[h,1] ,x = test_stat[[h]])))/2^17) #p-value, comparing one observed statistics (y) with all possible test statistics x for each CpG site
 }
 
 ```
@@ -106,7 +103,7 @@ z <- length(split_p)
 #store all minimum p values 
 min <- matrix(nrow=n, ncol=1)
 
-#store all corresponding elements in a matrix, and we will have 232=z matrixes in the end
+#store all corresponding elements in a matrix, and we will have 283=z matrixes in the end
 mat1<- matrix(nrow=z , ncol=1)
 mat <- list()
 
@@ -129,7 +126,7 @@ for (i in 1:n){ #n is number of elements in each list
 min <- as.data.frame(min)
 ```
 
-#graph 
+#graph
 ```{r}
 library(esquisse)
 esquisser(min)
@@ -149,9 +146,9 @@ ggplot(min) +
 
 
 
-#step 3 (calculate fully randomization based adjusted p-values): calculate the adjusted p values for the observed test statistics. All observed test statistics for each hypothesis are stored in ob_stat. Find the proportion of values in matrix min (minimum p value distribution) that are less than or equal to each value in the observed test statistics for each hypothesis, then that proportion is the adjusted p value
+#step 3: (calculate fully randomization based adjusted p-values): calculate the adjusted p values for the observed test statistics. All observed test statistics for each hypothesis are stored in ob_stat. Find the proportion of values in matrix min (minimum p value distribution) that are less than or equal to each value in the observed test statistics for each hypothesis, then that proportion is the adjusted p value
 ```{r}
-# adjust p values for 232 hypothesis
+# adjust p values for 283 hypothesis
 
 adjust_p <- matrix(nrow=x, ncol=1)
 
@@ -167,7 +164,7 @@ min(unadjust_p)
 ```
 
 
-# Section 3: FDR adjusted p-values for primary genes
+# Section 3: FDR adjusted p-values for secondary genes
 ```{r}
 fdr_adjust <- as.data.frame (p.adjust(unadjust_p, method = "fdr", n = length(unadjust_p)))
 fdr_adjust$fdr_adjusted <- fdr_adjust$`p.adjust(unadjust_p, method = "fdr", n = length(unadjust_p))`
@@ -175,8 +172,7 @@ fdr <- fdr_adjust %>% select(fdr_adjusted)
 ```
 
 
-
-# Section 4: Caculate mean differences for primary genes' CpG sites
+# Section 4: Caculate mean differences for secondary genes' CpG sites
 ```{r}
 mean_diff <- matrix(nrow=row, ncol=1)
 
@@ -187,51 +183,48 @@ for(h in 1:row){
 }
 ```
 
-
 # full join lung_genes with adjusted p value, and unadjusted p values
 ```{r}
-lung_genes_primary_results <-
+lung_genes_secondary_results <-
   adjust_p %>% cbind(df) %>% rename(ran_based_adjust_p=V1,CpG =Illumina, gene_name = X.19) %>%cbind(unadjust_p, fdr,mean_diff)  %>% select(2,3,5,1,6,7) %>% arrange(unadjust_p)
 
 #optional: save adjusted p-value files
-write_xlsx(lung_genes_primary_results,"/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/lung_genes_primary_results.xlsx")
+write_xlsx(lung_genes_secondary_results,"/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary genes/lung_genes_secondary_results.xlsx")
 ```
 
 
 # Section 5: Visualizations
 # vocalno plot of primary genes' unadjusted p-values
 ```{r}
-lung_genes_primary_results <- read_excel("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/lung_genes_primary_results.xlsx")
+lung_genes_secondary_results <- read_excel("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary genes/lung_genes_secondary_results.xlsx")
 
 minimum <- 2/(2^17)
 
 vn=expression(paste(-log[10],"(Unadjusted ",italic(P)," values)"))
-ti=expression(paste("Unadjusted Fisher-exact ", italic(P), " values of CpG sites of primary genes"))
+ti=expression(paste("Unadjusted Fisher-exact ", italic(P), " values of CpG sites of secondary genes"))
 
 label1=expression(paste(-log[10],(2/2^17))) ##
 
-volcano <- ggplot(data=lung_genes_primary_results, aes(x=mean_diff, y=-log10(unadjust_p))) + geom_point() + xlab("Average causal effect (ACE)") + ylab(vn) + xlim(-0.06, 0.06) + ylim(-0.3,5)+
-geom_hline(yintercept=-log10(minimum), col="red")+annotate("text", x=0.053, y=5, label=label1)+   geom_point(data = lung_genes_primary_results[which.min(lung_genes_primary_results$unadjust_p), ],color="red", fill="red",shape=11, size=2) + ggtitle(ti)
+volcano <- ggplot(data=lung_genes_secondary_results, aes(x=mean_diff, y=-log10(unadjust_p))) + geom_point() + xlab("Average causal effect (ACE)") + ylab(vn) + xlim(-0.06, 0.06) + ylim(-0.3,5)+
+geom_hline(yintercept=-log10(minimum), col="red")+annotate("text", x=0.053, y=5, label=label1)+   geom_point(data = lung_genes_secondary_results[which.min(lung_genes_secondary_results$unadjust_p), ],color="red", fill="red",shape=11, size=2) + ggtitle(ti)
 
 
 volcano
 
 ```
-
-# vocalno plot of primary genes' ran-based adjusted p-values
+# vocalno plot of secondary genes' ran-based adjusted p-values
 ```{r}
 min2 = 0.05
 vn=expression(paste(-log[10],"(Randomization-based adjusted ",italic(P)," values)"))
-ti=expression(paste("Fully randomization-based adjusted ", italic(P), " values of CpG sites of primary genes"))
+ti=expression(paste("Fully randomization-based adjusted ", italic(P), " values of CpG sites of secondary genes"))
 
 label1=expression(paste(-log[10],(0.05))) ##
 
-volcano2 <- ggplot(data=lung_genes_primary_results, aes(x=mean_diff, y=-log10(ran_based_adjust_p))) + geom_point() + xlab("Average causal effect (ACE)") + ylab(vn) + xlim(-0.06, 0.06) + ylim(-0.3,1.5)+
-geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, label=label1)+   geom_point(data = lung_genes_primary_results[which.min(lung_genes_primary_results$ran_based_adjust_p), ],color="red", fill="red",shape=11, size=2) + ggtitle(ti)
+volcano2 <- ggplot(data=lung_genes_secondary_results, aes(x=mean_diff, y=-log10(ran_based_adjust_p))) + geom_point() + xlab("Average causal effect (ACE)") + ylab(vn) + xlim(-0.06, 0.06) + ylim(-0.3,1.5)+
+geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, label=label1)+geom_point(data = lung_genes_secondary_results[which.min(lung_genes_secondary_results$ran_based_adjust_p), ],color="red", fill="red",shape=11, size=2) + ggtitle(ti)
 
 
 volcano2
-
 
 ```
 
@@ -239,18 +232,16 @@ volcano2
 # vocalno plot of primary genes' FDR adjusted p-values
 ```{r}
 vn=expression(paste(-log[10],"(FDR adjusted ",italic(P)," values)"))
-ti=expression(paste("FDR adjusted ", italic(P), " values of CpG sites of primary genes"))
+ti=expression(paste("FDR adjusted ", italic(P), " values of CpG sites of secondary genes"))
 
 label1=expression(paste(-log[10],(0.05))) ##
 
-volcano3 <- ggplot(data=lung_genes_primary_results, aes(x=mean_diff, y=-log10(fdr_adjusted))) + geom_point() + xlab("Average causal effect (ACE)") + ylab(vn) + xlim(-0.06, 0.06) + ylim(-0.3,1.5)+
-geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, label=label1)+   geom_point(data = lung_genes_primary_results[which.min(lung_genes_primary_results$fdr_adjusted), ],color="red", fill="red",shape=11, size=2) + ggtitle(ti)
+minfdr <- lung_genes_secondary_results[1:5,]
+
+
+volcano3 <- ggplot(data=lung_genes_secondary_results, aes(x=mean_diff, y=-log10(fdr_adjusted))) + geom_point() + xlab("Average causal effect (ACE)") + ylab(vn) + xlim(-0.06, 0.06) + ylim(-0.3,1.5)+
+geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, label=label1)+   geom_point(data = minfdr,color="red", fill="red",shape=11, size=2) + ggtitle(ti)
 
 
 volcano3
 ```
-
-```{r}
-
-```
-
