@@ -250,7 +250,3 @@ geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, 
 volcano3
 ```
 
-```{r}
-
-```
-
