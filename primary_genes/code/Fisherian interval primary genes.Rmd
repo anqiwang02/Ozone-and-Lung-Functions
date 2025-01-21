@@ -1,0 +1,1662 @@
+---
+title: "T paried fischer confidence interval for selected primary genes (one example)"
+output: html_notebook
+---
+
+#load library
+```{r}
+library(dplyr)
+library(tidyr)
+
+#clear the environment
+rm(list=ls()) 
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+```
+
+# Example 1: cg03610073 of TLR2. Effect size= -0.018702
+```{r}
+mn <- which(colnames(final_primary_CpG)=="cg03610073")   #provide the column number for the CpG site 
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg03610073)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+```
+
+
+# Calculate p value when the hypothesis is H_a=Yi(1)-Yi(0)=a, a is not equal to 0
+```{r}
+#trial "a" value
+a=0.009
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but 0.009 more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+a
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-a
+
+id <- final4$id2
+W_obs <-final4$exp
+Yi_wiO3<-final4$Yi_wiO3
+Yi_wiCA<-final4$Yi_wiCA
+Y_obs <- final4$Y_obs
+
+stat <- matrix(ncol=1, nrow=n)
+
+# t paired statistics
+for(i in 1:n) {
+  stat[i] <- t.test(Yi_wiO3[w0.true[i,]==1], Yi_wiCA[w0.true[i,]==-1],paired=TRUE)$statistic
+}
+
+stat
+
+stat_obs <- t.test(Y_obs[W_obs==1],Y_obs[W_obs==-1], paired=TRUE)$statistic
+
+stat_obs
+
+#p-value calculation
+p <- 1*sum(stat>=stat_obs)/n
+
+p
+```
+
+
+#constuct formulas to calculate p value for a list of a values and find the ones with p value larger than 0.025(due to two sided test(absolute value)) to construct fischer confidence interval
+
+#for lower boundry. This CpG site has a negative effect size -->calculating p value should use <=
+#should have no absolute value when calculating p value
+```{r}
+a=20
+vectora_low = as.matrix(seq(-0.02958, -0.02938, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+x[[i]]<-final4
+
+#when negative effect size, clean air (control) has larger values than the treatment O3
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p_low <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_CA[w0.true[j,]==-1],Yi_O3[w0.true[j,]==1], paired=TRUE)$statistic #we put clean air values first in t.test because it's expected to have larger values
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==-1], Y_obs[W_obs==1],paired=TRUE)$statistic
+
+p_value <- 1*sum(stat<=stat_obs)/n
+
+list_p_low[i,1]<-p_value
+
+print(c(i, p_value))
+}
+```
+
+#for upper boundry. This CpG site has a negative effect size -->calculating p value should use >=
+```{r}
+a=20
+vectora = as.matrix(seq(-0.0089, -0.007, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_CA[w0.true[j,]==-1], Yi_O3[w0.true[j,]==1],  paired=TRUE)$statistic
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==-1], Y_obs[W_obs==1], paired=TRUE)$statistic
+
+p_value <- 1*sum(stat>=stat_obs)/n
+
+list_p[i,1]<-p_value
+
+print(c(i, p_value))
+}
+```
+
+
+# visualization 
+# graphing of lower boundry 
+```{r}
+#lower boundry 
+plot(vectora_low, list_p_low)
+abline(h=0.025)
+
+#we can see that the lower boundry corresponds to a= -0.02953789
+```
+#graphing of upper boundry
+```{r}
+#upper boundry 
+plot(vectora, list_p)
+abline(h=0.025)
+
+#we can see that the upper boundry corresponds to a= -0.0079
+```
+## fisherian interval is [-0.02953789,-0.0079]
+
+
+# Section 2: cg18652319 of TLR2. effect size=0.002462
+```{r}
+#clear the environment
+rm(list=ls()) 
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+
+mn <- which(colnames(final_primary_CpG)=="cg18652319")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg18652319)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+```
+
+
+
+#for lower boundry. This CpG site has a positive effect size -->calculating p value should use >=
+#should have no absolute value when calculating p value
+```{r}
+a=20
+vectora_low = as.matrix(seq(0.00040, 0.00046, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p_low <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- abs(t.test(Yi_O3[w0.true[j,]==1], Yi_CA[w0.true[j,]==-1],paired=TRUE)$statistic)
+}
+
+#observed statistics(no absolute value)
+stat_obs <- abs(t.test(Y_obs[W_obs==1], Y_obs[W_obs==-1], paired=TRUE)$statistic)
+
+p_value <- 1*sum(stat>=stat_obs)/n
+
+list_p_low[i,1]<-p_value
+
+print(c(i,p_value))
+}
+
+
+```
+
+#for upper boundry. This CpG site has a positive effect size -->calculating p value should use <=
+```{r}
+a=20
+vectora = as.matrix(seq(0.00444, 0.00448, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- abs(t.test(Yi_O3[w0.true[j,]==1], Yi_CA[w0.true[j,]==-1],paired=TRUE)$statistic)
+}
+
+#observed statistics(no absolute value)
+stat_obs <- abs(t.test(Y_obs[W_obs==1], Y_obs[W_obs==-1],paired=TRUE)$statistic)
+
+p_value <- 1*sum(stat<=stat_obs)/n
+
+list_p[i,1]<-p_value
+
+print(c(i, p_value))
+}
+```
+
+
+# visualization 
+# graphing of lower boundry 
+```{r}
+#lower boundry 
+plot(vectora_low, list_p_low)
+abline(h=0.025)
+
+#we can see that the lower boundry corresponds to a= -0.02953789
+```
+
+
+#graphing of upper boundry
+```{r}
+#upper boundry 
+plot(vectora, list_p)
+abline(h=0.025)
+
+#we can see that the upper boundry corresponds to a= -0.0079
+```
+# Confidence interval: [0.0004094737, 0.004467368]
+
+#Section 3: cg03995486 of NOS2. effect sizes=0.008566
+```{r}
+#clear the environment
+rm(list=ls()) 
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+
+mn <- which(colnames(final_primary_CpG)=="cg03995486")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg03995486)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+```
+
+
+#for lower boundry. This CpG site has a positive effect size -->calculating p value should use >=
+#should have no absolute value when calculating p value
+```{r}
+a=20
+vectora_low = as.matrix(seq(0.0013, 0.0016, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p_low <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_O3[w0.true[j,]==1], Yi_CA[w0.true[j,]==-1],paired=TRUE)$statistic
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==1], Y_obs[W_obs==-1],paired=TRUE)$statistic
+
+p_value <- 1*sum(stat>=stat_obs)/n
+
+list_p_low[i,1]<-p_value
+
+print(c(i,p_value))
+}
+
+```
+
+# for upper boundry. This CpG site has a positive effect size -->calculating p value should use <=
+```{r}
+a=20
+vectora = as.matrix(seq(0.0153, 0.0157, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_O3[w0.true[j,]==1], Yi_CA[w0.true[j,]==-1],paired=TRUE)$statistic
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==1], Y_obs[W_obs==-1],paired=TRUE)$statistic
+
+p_value <- 1*sum(stat<=stat_obs)/n
+
+list_p[i,1]<-p_value
+
+print(c(i, p_value))
+}
+```
+
+
+# visualization 
+# graphing of lower boundry 
+```{r}
+#lower boundry 
+plot(vectora_low, list_p_low)
+abline(h=0.025)
+
+#we can see that the lower boundry corresponds to a= -0.02953789
+```
+
+#graphing of upper boundry
+```{r}
+#upper boundry 
+plot(vectora,list_p)
+abline(h=0.025)
+
+#we can see that the upper boundry corresponds to a= -0.0079
+```
+# 95% confidence interval is (0.001568421,0.01555263)
+
+
+# Section 4: cg01133890 of MUC5B, effect size = -0.011
+```{r}
+#clear the environment
+rm(list=ls()) 
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+
+mn <- which(colnames(final_primary_CpG)=="cg01133890")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg01133890)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+```
+
+
+#for lower boundry. This CpG site has a negative effect size -->calculating p value should use <=
+#should have no absolute value when calculating p value
+```{r}
+a=20
+vectora_low = as.matrix(seq(-0.022, -0.018, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p_low <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_CA[w0.true[j,]==-1],Yi_O3[w0.true[j,]==1], paired=TRUE)$statistic
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==-1], Y_obs[W_obs==1],paired=TRUE)$statistic
+
+p_value <- 1*sum(stat<=stat_obs)/n
+
+list_p_low[i,1]<-p_value
+
+print(c(i,p_value))
+}
+
+```
+
+#for upper boundry. This CpG site has a negative effect size -->calculating p value should use >=
+```{r}
+a=20
+vectora = as.matrix(seq(-0.0023, -0.0019, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_CA[w0.true[j,]==-1], Yi_O3[w0.true[j,]==1], paired=TRUE)$statistic
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==-1], Y_obs[W_obs==1],paired=TRUE)$statistic
+
+p_value <- 1*sum(stat>=stat_obs)/n
+
+list_p[i,1]<-p_value
+
+print(c(i, p_value))
+}
+```
+
+
+# visualization 
+# graphing of lower boundry 
+```{r}
+#lower boundry 
+plot(vectora_low, list_p_low)
+abline(h=0.025)
+
+#we can see that the lower boundry corresponds to a= -0.02953789
+```
+
+#graphing of upper boundry
+```{r}
+#upper boundry 
+plot(vectora,list_p)
+abline(h=0.025)
+
+#we can see that the upper boundry corresponds to a= -0.0079
+```
+
+# confidence interval is (-0.02094737, -0.002131579)
+
+#Section 5: cg05106269 of ICAM1. effective size = 0.009854
+```{r}
+#clear the environment
+rm(list=ls()) 
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+
+mn <- which(colnames(final_primary_CpG)=="cg05106269")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg05106269)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+```
+
+
+#for lower boundry. This CpG site has a positive effect size -->calculating p value should use >=
+#should have no absolute value when calculating p value
+```{r}
+a=20
+vectora_low = as.matrix(seq(0.00080, 0.00097, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p_low <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_O3[w0.true[j,]==1], Yi_CA[w0.true[j,]==-1],paired=TRUE)$statistic
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==1], Y_obs[W_obs==-1],paired=TRUE)$statistic
+
+p_value <- 1*sum(stat>=stat_obs)/n
+
+list_p_low[i,1]<-p_value
+
+print(c(i,p_value))
+}
+
+```
+
+# for upper boundry. This CpG site has a positive effect size -->calculating p value should use <=
+```{r}
+a=20
+vectora = as.matrix(seq(0.01868, 0.01952, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_O3[w0.true[j,]==1], Yi_CA[w0.true[j,]==-1],paired=TRUE)$statistic
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==1], Y_obs[W_obs==-1],paired=TRUE)$statistic
+
+p_value <- 1*sum(stat<=stat_obs)/n
+
+list_p[i,1]<-p_value
+
+print(c(i, p_value))
+}
+```
+
+# visualization 
+# graphing of lower boundry 
+```{r}
+#lower boundry 
+plot(vectora_low, list_p_low)
+abline(h=0.025)
+
+#we can see that the lower boundry corresponds to a= -0.02953789
+```
+
+#graphing of upper boundry
+```{r}
+#upper boundry 
+plot(vectora,list_p)
+abline(h=0.025)
+
+#we can see that the upper boundry corresponds to a= -0.0079
+```
+# confidence interval is [0.0008894737,0.01916632]
+
+
+#Section 6: cg00087425 of IL6. effect size = 0.0233. positive effect size 
+```{r}
+#clear the environment
+rm(list=ls()) 
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+
+mn <- which(colnames(final_primary_CpG)=="cg00087425")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg00087425)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+```
+
+
+#for lower boundry. This CpG site has a positive effect size -->calculating p value should use >=
+#should have no absolute value when calculating p value
+```{r}
+a=20
+vectora_low = as.matrix(seq(0.0021, 0.0025, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p_low <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_O3[w0.true[j,]==1], Yi_CA[w0.true[j,]==-1],paired=TRUE)$statistic
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==1], Y_obs[W_obs==-1],paired=TRUE)$statistic
+
+p_value <- 1*sum(stat>=stat_obs)/n
+
+list_p_low[i,1]<-p_value
+
+print(c(i,p_value))
+}
+
+```
+
+# for upper boundry. This CpG site has a positive effect size -->calculating p value should use <=
+```{r}
+a=20
+vectora = as.matrix(seq(0.043, 0.0455, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_O3[w0.true[j,]==1], Yi_CA[w0.true[j,]==-1],paired=TRUE)$statistic
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==1], Y_obs[W_obs==-1],paired=TRUE)$statistic
+
+p_value <- 1*sum(stat<=stat_obs)/n
+
+list_p[i,1]<-p_value
+
+print(c(i, p_value))
+}
+```
+
+
+# visualization 
+# graphing of lower boundry 
+```{r}
+#lower boundry 
+plot(vectora_low, list_p_low)
+abline(h=0.025)
+
+#we can see that the lower boundry corresponds to a= -0.02953789
+```
+
+#graphing of upper boundry
+```{r}
+#upper boundry 
+plot(vectora,list_p)
+abline(h=0.025)
+
+#we can see that the upper boundry corresponds to a= -0.0079
+```
+
+# confidence interval: [0.002226316, 0.04378947]
+
+
+#Section 7: cg02680732 of MUC 5B. effect size = -0.003436
+```{r}
+#clear the environment
+rm(list=ls()) 
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+
+mn <- which(colnames(final_primary_CpG)=="cg02680732")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg02680732)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+```
+
+
+#for lower boundry. This CpG site has a negative effect size -->calculating p value should use <=
+#should have no absolute value when calculating p value
+```{r}
+a=20
+vectora_low = as.matrix(seq(-0.0068, -0.0065, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p_low <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_CA[w0.true[j,]==-1],Yi_O3[w0.true[j,]==1], paired=TRUE)$statistic
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==-1], Y_obs[W_obs==1],paired=TRUE)$statistic
+
+p_value <- 1*sum(stat<=stat_obs)/n
+
+list_p_low[i,1]<-p_value
+
+print(c(i,p_value))
+}
+
+```
+
+
+#for upper boundry. This CpG site has a negative effect size -->calculating p value should use >=
+```{r}
+a=20
+vectora = as.matrix(seq(-0.00026, -0.00018, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_CA[w0.true[j,]==-1], Yi_O3[w0.true[j,]==1], paired=TRUE)$statistic
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==-1], Y_obs[W_obs==1],paired=TRUE)$statistic
+
+p_value <- 1*sum(stat>=stat_obs)/n
+
+list_p[i,1]<-p_value
+
+print(c(i, p_value))
+}
+```
+
+
+# visualization 
+# graphing of lower boundry 
+```{r}
+#lower boundry 
+plot(vectora_low, list_p_low)
+abline(h=0.025)
+
+#we can see that the lower boundry corresponds to a= -0.02953789
+```
+
+#graphing of upper boundry
+```{r}
+#upper boundry 
+plot(vectora,list_p)
+abline(h=0.025)
+
+#we can see that the upper boundry corresponds to a= -0.0079
+```
+
+# confidence interval: [-0.006736842, -0.0002347368]
+
+
+#Section 8: cg16547110 of TLR2. effect size=0.005242
+```{r}
+#clear the environment
+rm(list=ls()) 
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+
+mn <- which(colnames(final_primary_CpG)=="cg16547110")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg16547110)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+```
+
+
+#for lower boundry. This CpG site has a positive effect size -->calculating p value should use >=
+#should have no absolute value when calculating p value
+```{r}
+a=20
+vectora_low = as.matrix(seq(0.00016, 0.00021, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p_low <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_O3[w0.true[j,]==1], Yi_CA[w0.true[j,]==-1],paired=TRUE)$statistic
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==1], Y_obs[W_obs==-1],paired=TRUE)$statistic
+
+p_value <- 1*sum(stat>=stat_obs)/n
+
+list_p_low[i,1]<-p_value
+
+print(c(i,p_value))
+}
+
+```
+
+
+# for upper boundry. This CpG site has a positive effect size -->calculating p value should use <=
+```{r}
+a=20
+vectora = as.matrix(seq(0.01010526, 0.01031579, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_O3[w0.true[j,]==1], Yi_CA[w0.true[j,]==-1],paired=TRUE)$statistic
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==1], Y_obs[W_obs==-1],paired=TRUE)$statistic
+
+p_value <- 1*sum(stat<=stat_obs)/n
+
+list_p[i,1]<-p_value
+
+print(c(i, p_value))
+}
+```
+
+
+# visualization 
+# graphing of lower boundry 
+```{r}
+#lower boundry 
+plot(vectora_low, list_p_low)
+abline(h=0.025)
+
+#we can see that the lower boundry corresponds to a= -0.02953789
+```
+
+#graphing of upper boundry
+```{r}
+#upper boundry 
+plot(vectora,list_p)
+abline(h=0.025)
+
+#we can see that the upper boundry corresponds to a= -0.0079
+```
+
+# confidence interval: [0.0001810526, 0.01021607]
+
+
+#Section 9: cg10950028 of GSTM1. effect size = -0.0157
+```{r}
+#clear the environment
+rm(list=ls()) 
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+
+mn <- which(colnames(final_primary_CpG)=="cg10950028")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg10950028)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+```
+
+
+#for lower boundry. This CpG site has a negative effect size -->calculating p value should use <=
+#should have no absolute value when calculating p value
+```{r}
+a=20
+vectora_low = as.matrix(seq(-0.033, -0.031, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p_low <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_CA[w0.true[j,]==-1],Yi_O3[w0.true[j,]==1], paired=TRUE)$statistic
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==-1], Y_obs[W_obs==1],paired=TRUE)$statistic
+
+p_value <- 1*sum(stat<=stat_obs)/n
+
+list_p_low[i,1]<-p_value
+
+print(c(i,p_value))
+}
+
+```
+
+#for upper boundry. This CpG site has a negative effect size -->calculating p value should use >=
+```{r}
+a=20
+vectora = as.matrix(seq(0.00015, 0.0005, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+
+#substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+x[[i]]<-final4
+}
+```
+
+
+```{r}
+#create a matrix with all p-values corresponding to each value a
+
+list_p <- matrix(nrow=a, ncol=1)     # nrow= number of a values
+
+for(i in 1:a) {
+id <- x[[i]]$"id2"
+W_obs <-x[[i]]$"exp"
+Yi_CA<-x[[i]]$"Yi_wiCA"
+Yi_O3<-x[[i]]$"Yi_wiO3"
+Y_obs <- x[[i]]$"Y_obs"
+stat <- matrix(ncol=1, nrow=n)
+
+
+for(j in 1:n) {
+  stat[j] <- t.test(Yi_CA[w0.true[j,]==-1], Yi_O3[w0.true[j,]==1], paired=TRUE)$statistic
+}
+
+#observed statistics(no absolute value)
+stat_obs <- t.test(Y_obs[W_obs==-1], Y_obs[W_obs==1],paired=TRUE)$statistic
+
+p_value <- 1*sum(stat>=stat_obs)/n
+
+list_p[i,1]<-p_value
+
+print(c(i, p_value))
+}
+```
+
+# confidence interval [-0.03226316, 0.0002789474]
+
+
+# visualization 
+# graphing of lower boundry 
+```{r}
+#lower boundry 
+plot(vectora_low, list_p_low)
+abline(h=0.025)
+
+#we can see that the lower boundry corresponds to a= -0.02953789
+```
+
+#graphing of upper boundry
+```{r}
+#upper boundry 
+plot(vectora,list_p)
+abline(h=0.025)
+
+#we can see that the upper boundry corresponds to a= -0.0079
+```
