@@ -1,0 +1,66 @@
+---
+title: "Neymanian interval primary genes (T-paired)"
+output: html_notebook
+---
+#load library
+```{r}
+library(dplyr)
+library(tidyr)
+library(readxl)
+library(writexl)
+
+#clear the environment
+rm(list=ls()) 
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+primary_results <- read_excel("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/lung_genes_primary_results.xlsx")
+
+alpha = 0.05
+```
+
+# Select the top 9 CpG sites (which have the smallest unadjusted p-values)
+```{r}
+CpG <- as.matrix(primary_results[c(1:9),1])
+
+n=nrow(CpG)
+```
+
+# calculate 95% Neymanian interval for top 9 primary CpG sites 
+```{r}
+#find two-tailed t critical values for 95% CI
+t <- qt(p=.05/2, df=16, lower.tail=FALSE)
+
+d_i <- list()
+s_d <- matrix(nrow=9, ncol=1)
+d_bar <- matrix(nrow=9, ncol=1)
+CI <- matrix(nrow=9, ncol=2)
+
+for(h in 1:n){ #h represents the number of cpg column values
+   mn <- which(colnames(final_primary_CpG)==CpG[h,1]) #find the column number mn for the desired CpG in the final primary Cpg dataset
+   table <- final_primary_CpG %>% select(2,3,mn) #make a table that only has the selected CpG
+   table_wide <- table %>% pivot_wider(names_from = Exposure, values_from = as.character(CpG[h,1])) # make the table wider
+   d_i[h]<- table_wide[,3]-table_wide[,2] #values of ozone treatment minus that of clean air
+   s_d[h,1]<-sd(d_i[[h]]) #standard deviation of differences 
+   d_bar[h,1] <-sum(d_i[[h]])/17 #sample mean of differences
+   CI[h,1] <-  d_bar[h,1] - t*s_d[h,1]/sqrt(17)   #lower bound stored here
+   CI[h,2] <-  d_bar[h,1] + t*s_d[h,1]/sqrt(17)   #upper bound stored here
+}
+
+CI_neyman_primary <- CpG %>% cbind(CI) %>% as.data.frame() %>% rename(lower_bound=V2, upper_bound=V3) %>% mutate(lower_bound=as.numeric(lower_bound)) %>% mutate(upper_bound=as.numeric(upper_bound)) 
+
+write_xlsx(CI_neyman_primary,"/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/top9_95CI_primary.xlsx")
+
+#option rounding: CI_neyman_primary[1:9, 2:3] <- round(CI_neyman_primary[1:9, 2:3], digits = 4)
+
+#can check loop using the following command: 
+#cg036 <- final_primary_CpG %>% select(c(2,3), which(colnames(final_primary_CpG)=="cg03610073")) #%>% rename(methylation = cg03610073)
+
+#pivot wider 
+#cg036_wide <- cg036 %>% pivot_wider(names_from = Exposure, values_from = cg03610073)
+
+#we are just using the following code to get confidence interval, not doing t.test
+#t.test(cg036_wide$O3, cg036_wide$CA, conf.level = 0.95, paired = T)
+
+```
+
+
