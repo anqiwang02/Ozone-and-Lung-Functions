@@ -19,7 +19,7 @@ rm(list=ls())
 
 #Load data
 ```{r}
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary_genes/Exp_data_primary_CpG.RData")
 load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
 #W0.true is a matrix that represents all possible randomizations of paired data of 17 individuals
 
