@@ -196,17 +196,17 @@ write_xlsx(lung_genes_secondary_results,"/Users/anqiwang/Documents/GitHub/Ozone-
 # Section 5: Visualizations
 # vocalno plot of primary genes' unadjusted p-values
 ```{r}
-lung_genes_secondary_results <- read_excel("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary genes/lung_genes_secondary_results.xlsx")
+lung_genes_secondary_results <- read_excel("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary_genes/lung_genes_secondary_results.xlsx")
 
 minimum <- 2/(2^17)
 
-vn=expression(paste(-log[10],"(Unadjusted ",italic(P)," values)"))
-ti=expression(paste("Unadjusted Fisher-exact ", italic(P), " values of CpG sites of secondary genes"))
+vn=expression(paste(-log[10],"(unadjusted p-values)"))
+ti=expression(paste("Unadjusted Fisher-exact p-values of CpG sites of secondary genes"))
 
 label1=expression(paste(-log[10],(2/2^17))) ##
 
 volcano <- ggplot(data=lung_genes_secondary_results, aes(x=mean_diff, y=-log10(unadjust_p))) + geom_point() + xlab("Average causal effect (ACE)") + ylab(vn) + xlim(-0.06, 0.06) + ylim(-0.3,5)+
-geom_hline(yintercept=-log10(minimum), col="red")+annotate("text", x=0.053, y=5, label=label1)+   geom_point(data = lung_genes_secondary_results[which.min(lung_genes_secondary_results$unadjust_p), ],color="red", fill="red",shape=11, size=2) + ggtitle(ti)
+geom_hline(yintercept=-log10(minimum), col="red")+annotate("text", x=0.053, y=5, label=label1)+   geom_point(data = lung_genes_secondary_results[which.min(lung_genes_secondary_results$unadjust_p), ],color="red", fill="red",shape=11, size=2) + ggtitle(ti)+theme_classic()
 
 
 volcano
@@ -215,13 +215,13 @@ volcano
 # vocalno plot of secondary genes' ran-based adjusted p-values
 ```{r}
 min2 = 0.05
-vn=expression(paste(-log[10],"(Randomization-based adjusted ",italic(P)," values)"))
-ti=expression(paste("Fully randomization-based adjusted ", italic(P), " values of CpG sites of secondary genes"))
+vn=expression(paste(-log[10],"(fully randomization-based adjusted p-values)"))
+ti=expression(paste("Fully randomization-based adjusted p-values of CpG sites of secondary genes"))
 
 label1=expression(paste(-log[10],(0.05))) ##
 
 volcano2 <- ggplot(data=lung_genes_secondary_results, aes(x=mean_diff, y=-log10(ran_based_adjust_p))) + geom_point() + xlab("Average causal effect (ACE)") + ylab(vn) + xlim(-0.06, 0.06) + ylim(-0.3,1.5)+
-geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, label=label1)+geom_point(data = lung_genes_secondary_results[which.min(lung_genes_secondary_results$ran_based_adjust_p), ],color="red", fill="red",shape=11, size=2) + ggtitle(ti)
+geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, label=label1)+geom_point(data = lung_genes_secondary_results[which.min(lung_genes_secondary_results$ran_based_adjust_p), ],color="red", fill="red",shape=11, size=2) + ggtitle(ti)+theme_classic()
 
 
 volcano2
@@ -231,8 +231,8 @@ volcano2
 
 # vocalno plot of primary genes' FDR adjusted p-values
 ```{r}
-vn=expression(paste(-log[10],"(FDR adjusted ",italic(P)," values)"))
-ti=expression(paste("FDR adjusted ", italic(P), " values of CpG sites of secondary genes"))
+vn=expression(paste(-log[10],"(FDR adjusted p-values)"))
+ti=expression(paste("FDR adjusted p-values of CpG sites of secondary genes"))
 
 label1=expression(paste(-log[10],(0.05))) ##
 
@@ -240,7 +240,7 @@ minfdr <- lung_genes_secondary_results[1:5,]
 
 
 volcano3 <- ggplot(data=lung_genes_secondary_results, aes(x=mean_diff, y=-log10(fdr_adjusted))) + geom_point() + xlab("Average causal effect (ACE)") + ylab(vn) + xlim(-0.06, 0.06) + ylim(-0.3,1.5)+
-geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, label=label1)+   geom_point(data = minfdr,color="red", fill="red",shape=11, size=2) + ggtitle(ti)
+geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, label=label1)+   geom_point(data = minfdr,color="red", fill="red",shape=11, size=2) + ggtitle(ti)+theme_classic()
 
 
 volcano3
