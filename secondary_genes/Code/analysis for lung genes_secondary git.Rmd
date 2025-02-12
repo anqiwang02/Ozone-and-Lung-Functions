@@ -11,7 +11,7 @@ library(tidyr)
 library(tidyverse)
 library(writexl)
 library(readxl)
-
+library(ggplot2)
 library(purrr)
 
 rm(list=ls()) 
@@ -19,7 +19,7 @@ rm(list=ls())
 
 #Load data
 ```{r}
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary genes/Exp_data_secondary_CpG.RData")
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary_genes/Exp_data_secondary_CpG.RData")
 load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
 #W0.true is a matrix that represents all possible randomizations of paired data of 17 individuals
 
@@ -205,12 +205,14 @@ ti=expression(paste("Unadjusted Fisher-exact p-values of CpG sites of secondary 
 
 label1=expression(paste(-log[10],(2/2^17))) ##
 
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/sec_vol_unadj.pdf", width = 7, height = 5, pointsize = 12, family = "Times")
 volcano <- ggplot(data=lung_genes_secondary_results, aes(x=mean_diff, y=-log10(unadjust_p))) + geom_point() + xlab("Average causal effect (ACE)") + ylab(vn) + xlim(-0.06, 0.06) + ylim(-0.3,5)+
-geom_hline(yintercept=-log10(minimum), col="red")+annotate("text", x=0.053, y=5, label=label1)+   geom_point(data = lung_genes_secondary_results[which.min(lung_genes_secondary_results$unadjust_p), ],color="red", fill="red",shape=11, size=2) + ggtitle(ti)+theme_classic()
+geom_hline(yintercept=-log10(minimum), col="red")+annotate("text", x=0.053, y=5, label=label1)+   geom_point(data = lung_genes_secondary_results[which.min(lung_genes_secondary_results$unadjust_p), ],color="red", fill="red",shape=11, size=2) + theme_classic() #ggtitle(ti)+
 
 
 volcano
 
+dev.off()
 ```
 # vocalno plot of secondary genes' ran-based adjusted p-values
 ```{r}
@@ -220,12 +222,13 @@ ti=expression(paste("Fully randomization-based adjusted p-values of CpG sites of
 
 label1=expression(paste(-log[10],(0.05))) ##
 
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/sec_vol_rand_adj.pdf", width = 7, height = 5, pointsize = 12, family = "Times")
 volcano2 <- ggplot(data=lung_genes_secondary_results, aes(x=mean_diff, y=-log10(ran_based_adjust_p))) + geom_point() + xlab("Average causal effect (ACE)") + ylab(vn) + xlim(-0.06, 0.06) + ylim(-0.3,1.5)+
-geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, label=label1)+geom_point(data = lung_genes_secondary_results[which.min(lung_genes_secondary_results$ran_based_adjust_p), ],color="red", fill="red",shape=11, size=2) + ggtitle(ti)+theme_classic()
+geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, label=label1)+geom_point(data = lung_genes_secondary_results[which.min(lung_genes_secondary_results$ran_based_adjust_p), ],color="red", fill="red",shape=11, size=2)+theme_classic() #+ ggtitle(ti)
 
 
 volcano2
-
+dev.off()
 ```
 
 
@@ -238,10 +241,52 @@ label1=expression(paste(-log[10],(0.05))) ##
 
 minfdr <- lung_genes_secondary_results[1:5,]
 
-
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/sec_vol_fdr_adj.pdf", width = 7, height = 5, pointsize = 12, family = "Times")
 volcano3 <- ggplot(data=lung_genes_secondary_results, aes(x=mean_diff, y=-log10(fdr_adjusted))) + geom_point() + xlab("Average causal effect (ACE)") + ylab(vn) + xlim(-0.06, 0.06) + ylim(-0.3,1.5)+
-geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, label=label1)+   geom_point(data = minfdr,color="red", fill="red",shape=11, size=2) + ggtitle(ti)+theme_classic()
+geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, label=label1)+   geom_point(data = minfdr,color="red", fill="red",shape=11, size=2) +theme_classic() #+ ggtitle(ti)
 
 
 volcano3
+dev.off()
+```
+
+# histogram of all CpG sites of PLSCR1 gene in the secondary gene group
+```{r}
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary_genes/secondary gene and CPG.RData")
+
+df <-
+ df%>% filter(str_detect(X.19, "PLSCR1")) %>% select(1, 2) 
+
+df 
+
+row <- nrow(df)
+```
+# graph histogram for 12 cpg sites of gene TLR2 
+```{r}
+#three places to replace column 11
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/hist_PLSCR1.pdf", width = 9, height = 9, pointsize = 12, family = "Times")  
+
+colnames(final) <- trimws(colnames(final))  # Remove leading/trailing spaces
+
+par(mfrow = c(4, 4))
+for(h in 1:row){
+    #if else function, this column doesn't exist 
+    #mn <- which(colnames(final)==df[h,1])
+    j <- trimws(as.character(df[h,1]))  # Remove spaces
+    if (j %in% names(final)) {
+    #w0.true[1,]
+    mn <- which(colnames(final)==j)  
+#as.matrix(final[,mn]) #mn is the column cpg we are interested in 
+   Test_Statistics<-abs(w0.true%*%as.matrix(final[,mn])/17)  #all possible test stat
+   hist(Test_Statistics, breaks=100, main = paste("" , df[h,1]), xlab="Test statistics")
+    b<-abs(t(final$exp)%*%as.matrix(final[,mn])/17) #observed test stat
+   abline(v=b, col="red")
+    }
+    else {
+      a<-NA
+    }
+}
+
+dev.off()
+
 ```
