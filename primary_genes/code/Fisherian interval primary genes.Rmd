@@ -1,5 +1,5 @@
 ---
-title: "T paried fischer confidence interval for selected primary genes (one example)"
+title: "T paried fischer interval for selected primary genes (one example)"
 output: html_notebook
 ---
 
@@ -11,7 +11,7 @@ library(tidyr)
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary_genes/Exp_data_primary_CpG.RData")
 
 load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
 ```
@@ -58,7 +58,7 @@ final4<-
 # Calculate p value when the hypothesis is H_a=Yi(1)-Yi(0)=a, a is not equal to 0
 ```{r}
 #trial "a" value
-a=0.009
+a=0.1
 
 #substitute the NA value in Yi_1 with the correponding value in Yi_0 but 0.009 more
 final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+a

@@ -1,0 +1,1913 @@
+
+#load library
+
+library(dplyr)
+library(tidyr)
+
+#clear the environment
+rm(list=ls()) 
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary_genes/Exp_data_primary_CpG.RData")
+
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+
+
+# Example 1: cg03610073 of TLR2. Effect size= -0.018702
+
+mn <- which(colnames(final_primary_CpG)=="cg03610073")   #provide the column number for the CpG site 
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg03610073)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+ 
+
+
+#constuct formulas to calculate p value for a list of a values and find the ones with p value larger than 0.025(due to two sided test(absolute value)) to construct fischer confidence interval
+
+#for lower boundry. This CpG site has a negative effect size -->calculating p value should use <=
+#should have no absolute value when calculating p value
+
+a=200
+vectora_low = as.matrix(seq(-0.043, 0, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+  x[[i]]<-final4
+  print(i)
+  #when negative effect size, clean air (control) has larger values than the treatment O3
+}
+ 
+
+
+
+library(parallel)
+
+list_p_low <- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_CA[w == -1], Yi_O3[w == 1], paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == -1], Y_obs[W_obs == 1], paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat<=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p_low[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+
+ 
+
+
+#for upper boundry. This CpG site has a negative effect size -->calculating p value should use >=
+
+a=200
+vectora = as.matrix(seq(-0.035, 0, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+
+list_p<- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_CA[w == -1], Yi_O3[w == 1], paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == -1], Y_obs[W_obs == 1], paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat>=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+ 
+
+
+# visualization 
+# graphing of lower boundry (df1)
+
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg03610073_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+
+#lower boundry 
+library(ggplot2)
+
+# Assuming vectora_low and list_p_low are vectors
+df1 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
+
+ggplot(df, aes(x = vectora_low, y = list_p_low)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect for cg03610073",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+
+dev.off()
+
+ 
+#graphing of upper boundry (df2)
+
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg03610073_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+#upper boundry 
+library(ggplot2)
+
+# Assuming vectora_low and list_p_low are vectors
+df2 <- data.frame(vectora, list_p = list_p[,1])  # Convert to dataframe
+
+ggplot(df2, aes(x = vectora, y = list_p)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect for cg03610073",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+
+dev.off()
+ 
+## fisherian interval is [-0.02953789,-0.0079]
+
+
+# Section 2: cg18652319 of TLR2. effect size=0.002462
+
+mn <- which(colnames(final_primary_CpG)=="cg18652319")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg18652319)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+ 
+
+
+
+#for lower boundry. This CpG site has a positive effect size -->calculating p value should use >=
+#should have no absolute value when calculating p value
+
+a=200
+vectora_low = as.matrix(seq(0, 0.005, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+#create a matrix with all p-values corresponding to each value a
+
+library(parallel)
+
+list_p_low <- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_O3[w == 1], Yi_CA[w == -1],paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == 1], Y_obs[W_obs == -1],paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat>=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p_low[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+
+ 
+
+#for upper boundry. This CpG site has a positive effect size -->calculating p value should use <=
+ 
+a=200
+vectora = as.matrix(seq(0, 0.006, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+#create a matrix with all p-values corresponding to each value a
+list_p<- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_O3[w == 1], Yi_CA[w == -1], paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == 1], Y_obs[W_obs == -1], paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat<=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+ 
+
+
+# visualization 
+# graphing of lower boundry (df3)
+ 
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg18652319_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+
+#lower boundry 
+library(ggplot2)
+
+# Assuming vectora_low and list_p_low are vectors
+df3 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
+
+ggplot(df3, aes(x = vectora_low, y = list_p_low)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect for cg18652319",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+
+dev.off()
+
+ 
+
+#graphing of upper boundry cg18652319 (df4)
+ 
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg18652319_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+
+#upper boundry 
+library(ggplot2)
+
+# Assuming vectora_low and list_p_low are vectors
+df4 <- data.frame(vectora, list_p = list_p[,1])  # Convert to dataframe
+
+ggplot(df4, aes(x = vectora, y = list_p)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect for cg18652319",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+
+dev.off()
+ 
+# Confidence interval: [0.0004094737, 0.004467368]
+
+
+
+#Section 3: cg03995486 of NOS2. effect sizes=0.008566
+ 
+mn <- which(colnames(final_primary_CpG)=="cg03995486")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg03995486)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+ 
+
+
+#for lower boundry. This CpG site has a positive effect size -->calculating p value should use >=
+#should have no absolute value when calculating p value
+ 
+a=200
+vectora_low = as.matrix(seq(-0.01, 0.025, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+#create a matrix with all p-values corresponding to each value a
+
+library(parallel)
+
+list_p_low <- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_O3[w == 1], Yi_CA[w == -1],paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == 1], Y_obs[W_obs == -1],paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat>=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p_low[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+
+
+ 
+
+# for upper boundry. This CpG site has a positive effect size -->calculating p value should use <=
+ 
+a=200
+vectora = as.matrix(seq(0, 0.028254847, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+#create a matrix with all p-values corresponding to each value a
+library(parallel)
+list_p<- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_O3[w == 1], Yi_CA[w == -1], paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == 1], Y_obs[W_obs == -1], paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat<=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+ 
+
+
+# visualization 
+#graphing of lower boundry (df5)
+ 
+#lower boundry 
+library(ggplot2)
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg03995486_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+
+# Assuming vectora_low and list_p_low are vectors
+df5 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
+
+ggplot(df5, aes(x = vectora_low, y = list_p_low)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect for cg03995486",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+
+dev.off()
+ 
+
+#graphing of upper boundry (df6)
+ 
+#upper boundry 
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg03995486_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")
+library(ggplot2)
+
+# Assuming vectora_low and list_p_low are vectors
+df6 <- data.frame(vectora, list_p = list_p[,1])  # Convert to dataframe
+
+ggplot(df6, aes(x = vectora, y = list_p)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect for cg03995486",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+dev.off()
+ 
+# 95% confidence interval is (0.001568421,0.01555263)
+
+
+# Section 4: cg01133890 of MUC5B, effect size = -0.011
+ 
+
+mn <- which(colnames(final_primary_CpG)=="cg01133890")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg01133890)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+ 
+
+
+#for lower boundry. This CpG site has a negative effect size -->calculating p value should use <=
+#should have no absolute value when calculating p value
+ 
+a=200
+vectora_low = as.matrix(seq(-0.03, 0, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+library(parallel)
+
+list_p_low <- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_CA[w == -1], Yi_O3[w == 1], paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == -1], Y_obs[W_obs == 1], paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat<=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p_low[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+
+ 
+
+#for upper boundry. This CpG site has a negative effect size -->calculating p value should use >= 
+ 
+a=200
+vectora = as.matrix(seq(-0.025, 0.008, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+list_p<- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_CA[w == -1], Yi_O3[w == 1], paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == -1], Y_obs[W_obs == 1], paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat>=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+ 
+
+
+# visualization 
+# graphing of lower boundry (df7)
+ 
+#lower boundry 
+library(ggplot2)
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg01133890_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+
+# Assuming vectora_low and list_p_low are vectors
+df7 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
+
+ggplot(df7, aes(x = vectora_low, y = list_p_low)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect for cg01133890",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+
+dev.off()
+ 
+
+#graphing of upper boundry (df8)
+ 
+#upper boundry 
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg01133890_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")
+library(ggplot2)
+
+# Assuming vectora_low and list_p_low are vectors
+df8 <- data.frame(vectora, list_p = list_p[,1])  # Convert to dataframe
+
+ggplot(df8, aes(x = vectora, y = list_p)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect for cg01133890",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+dev.off()
+ 
+
+# confidence interval is (-0.02094737, -0.002131579)
+
+#Section 5: cg05106269 of ICAM1. effective size = 0.009854
+ 
+mn <- which(colnames(final_primary_CpG)=="cg05106269")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg05106269)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+ 
+
+
+#for lower boundry. This CpG site has a positive effect size -->calculating p value should use >=
+#should have no absolute value when calculating p value
+ 
+a=200
+vectora_low = as.matrix(seq(-0.015, 0.03, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+#create a matrix with all p-values corresponding to each value a
+
+library(parallel)
+
+list_p_low <- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_O3[w == 1], Yi_CA[w == -1],paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == 1], Y_obs[W_obs == -1],paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat>=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p_low[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+
+ 
+
+# for upper boundry. This CpG site has a positive effect size -->calculating p value should use <=
+ 
+a=200
+vectora = as.matrix(seq(-0.002631579, 0.03, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+#create a matrix with all p-values corresponding to each value a
+library(parallel)
+list_p<- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_O3[w == 1], Yi_CA[w == -1], paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == 1], Y_obs[W_obs == -1], paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat<=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+ 
+
+# visualization 
+# graphing of lower boundry (df9)
+ 
+#lower boundry 
+library(ggplot2)
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg05106269_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+
+# Assuming vectora_low and list_p_low are vectors
+df9 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
+
+ggplot(df9, aes(x = vectora_low, y = list_p_low)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect for cg05106269",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+
+dev.off()
+ 
+
+#graphing of upper boundry (df10)
+ 
+#upper boundry 
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg05106269_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")
+library(ggplot2)
+
+# Assuming vectora_low and list_p_low are vectors
+df10 <- data.frame(vectora, list_p = list_p[,1])  # Convert to dataframe
+
+ggplot(df10, aes(x = vectora, y = list_p)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect for cg05106269",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+dev.off()
+ 
+# confidence interval is [0.0008894737,0.01916632]
+
+
+#Section 6: cg00087425 of IL6. effect size = 0.0233. positive effect size 
+ 
+mn <- which(colnames(final_primary_CpG)=="cg00087425")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg00087425)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+ 
+
+
+#for lower boundry. This CpG site has a positive effect size -->calculating p value should use >=
+#should have no absolute value when calculating p value
+ 
+a=200
+vectora_low = as.matrix(seq(-0.025, 0.06, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+#create a matrix with all p-values corresponding to each value a
+
+library(parallel)
+
+list_p_low <- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_O3[w == 1], Yi_CA[w == -1],paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == 1], Y_obs[W_obs == -1],paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat>=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p_low[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+
+ 
+
+# for upper boundry. This CpG site has a positive effect size -->calculating p value should use <=
+ 
+a=200
+vectora = as.matrix(seq(-0.018, 0.06, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+#create a matrix with all p-values corresponding to each value a
+list_p<- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_O3[w == 1], Yi_CA[w == -1], paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == 1], Y_obs[W_obs == -1], paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat<=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+ 
+
+
+# visualization 
+# graphing of lower boundry (df11)
+ 
+#lower boundry 
+library(ggplot2)
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg00087425_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+
+# Assuming vectora_low and list_p_low are vectors
+df11 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
+
+ggplot(df11, aes(x = vectora_low, y = list_p_low)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect for cg00087425",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+
+dev.off()
+ 
+
+#graphing of upper boundry (df12)
+ 
+#upper boundry 
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg00087425_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")
+library(ggplot2)
+
+# Assuming vectora_low and list_p_low are vectors
+df12 <- data.frame(vectora, list_p = list_p[,1])  # Convert to dataframe
+
+ggplot(df12, aes(x = vectora, y = list_p)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect for cg00087425",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+dev.off()
+ 
+
+# confidence interval: [0.002226316, 0.04378947]
+
+
+#Section 7: cg02680732 of MUC 5B. effect size = -0.003436
+ 
+#clear the environment
+mn <- which(colnames(final_primary_CpG)=="cg02680732")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg02680732)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+ 
+
+
+#for lower boundry. This CpG site has a negative effect size -->calculating p value should use <=
+#should have no absolute value when calculating p value
+ 
+a=200
+vectora_low = as.matrix(seq(-0.01052632, 0.003, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+library(parallel)
+
+list_p_low <- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_CA[w == -1], Yi_O3[w == 1], paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == -1], Y_obs[W_obs == 1], paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat<=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p_low[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+
+ 
+
+
+#for upper boundry. This CpG site has a negative effect size -->calculating p value should use >=
+ 
+a=200
+vectora = as.matrix(seq(-0.012, 0.003, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+list_p<- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_CA[w == -1], Yi_O3[w == 1], paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == -1], Y_obs[W_obs == 1], paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat>=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+ 
+
+
+# visualization 
+# graphing of lower boundry (df13)
+ 
+#lower boundry 
+library(ggplot2)
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg02680732_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+
+# Assuming vectora_low and list_p_low are vectors
+df13 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
+
+ggplot(df13, aes(x = vectora_low, y = list_p_low)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect (a) for cg02680732",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+
+dev.off()
+ 
+
+#graphing of upper boundry (df14)
+ 
+#upper boundry 
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg02680732_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")
+library(ggplot2)
+
+# Assuming vectora_low and list_p_low are vectors
+df14 <- data.frame(vectora, list_p = list_p[,1])  # Convert to dataframe
+
+ggplot(df14, aes(x = vectora, y = list_p)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect for cg02680732",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+dev.off()
+ 
+
+
+# confidence interval: [-0.006736842, -0.0002347368]
+
+
+#Section 8: cg16547110 of TLR2. effect size=0.005242
+ 
+#clear the environment
+
+mn <- which(colnames(final_primary_CpG)=="cg16547110")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg16547110)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+ 
+
+
+#for lower boundry. This CpG site has a positive effect size -->calculating p value should use >=
+#should have no absolute value when calculating p value
+ 
+a=200
+vectora_low = as.matrix(seq(-0.005, 0.014, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+library(parallel)
+
+list_p_low <- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_O3[w == 1], Yi_CA[w == -1],paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == 1], Y_obs[W_obs == -1],paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat>=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p_low[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+
+ 
+
+
+# for upper boundry. This CpG site has a positive effect size -->calculating p value should use <=
+ 
+a=200
+vectora = as.matrix(seq(-0.006, 0.015, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+#create a matrix with all p-values corresponding to each value a
+list_p<- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_O3[w == 1], Yi_CA[w == -1], paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == 1], Y_obs[W_obs == -1], paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat<=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+ 
+
+
+# visualization 
+# graphing of lower boundry (df15)
+ 
+#lower boundry 
+library(ggplot2)
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg16547110_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+
+# Assuming vectora_low and list_p_low are vectors
+df15 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
+
+ggplot(df15, aes(x = vectora_low, y = list_p_low)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect (a) for cg16547110",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+
+dev.off()
+ 
+
+#graphing of upper boundry (df16)
+ 
+#upper boundry 
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg16547110_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")
+library(ggplot2)
+
+# Assuming vectora_low and list_p_low are vectors
+df16 <- data.frame(vectora, list_p = list_p[,1])  # Convert to dataframe
+
+ggplot(df16, aes(x = vectora, y = list_p)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect for cg16547110",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+dev.off()
+ 
+
+# confidence interval: [0.0001810526, 0.01021607]
+
+
+#Section 9: cg10950028 of GSTM1. effect size = -0.0157
+ 
+mn <- which(colnames(final_primary_CpG)=="cg10950028")   #provide the column number for the CpG site 
+
+#all possible randomizations
+n <- 2^17
+
+#create a data frame that contains the CpG site of interest
+final1<-
+  final_primary_CpG %>%
+  select(c(1:4),mn) %>%
+  rename(Y_obs = cg10950028)
+
+#data wrangling
+#ozone, 1=O3
+final2 <-
+  final1%>%
+  filter(exp==1) %>%
+  rename(Yi_wiO3 = Y_obs)%>%
+  select(3,4,5)
+
+#clean air, -1=CA
+final3 <-
+  final1 %>%
+  filter(exp==-1)%>%
+  rename(Yi_wiCA = Y_obs)%>%
+  select(3,4,5)
+
+
+#full join table final4 with final2 or final 3, respectively
+final4 <-
+  full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,6,5)
+
+final4<-
+  full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+  select(1,2,3,4,5,7,6)
+ 
+
+
+#for lower boundry. This CpG site has a negative effect size -->calculating p value should use <=
+#should have no absolute value when calculating p value
+ 
+a=200
+vectora_low = as.matrix(seq(-0.053, 0.018421053, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora_low[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora_low[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+library(parallel)
+
+list_p_low <- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_CA[w == -1], Yi_O3[w == 1], paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == -1], Y_obs[W_obs == 1], paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat<=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p_low[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+
+ 
+
+
+#for upper boundry. This CpG site has a negative effect size -->calculating p value should use >=
+ 
+a=200
+vectora = as.matrix(seq(-0.06, 0.020526316, length.out = a)) #if changing the number of a values here length.out=# of a values
+
+x<-list()
+
+for(i in 1:a) { # of a value in the loop
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but "a" more
+  final4 <-
+    full_join(final1, final2, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,6,5)
+  
+  final4<-
+    full_join(final4, final3, by = c("id2" = "id2", "exp" = "exp")) %>%
+    select(1,2,3,4,5,7,6)
+  
+  #substitute the NA value in Yi_1 with the correponding value in Yi_0 but a more
+  final4$Yi_wiO3[is.na(final4$Yi_wiO3)] <- final4$Yi_wiCA[final4$exp==-1]+vectora[i,1]
+  final4$Yi_wiCA[is.na(final4$Yi_wiCA)] <- final4$Yi_wiO3[final4$exp==1]-vectora[i,1]
+  x[[i]]<-final4
+}
+ 
+
+
+ 
+list_p<- matrix(nrow=a, ncol=1)  # nrow= number of a values
+
+# Function for processing a single `i`
+compute_p_value <- function(i) {
+  id <- x[[i]]$"id2"
+  W_obs <- x[[i]]$"exp"
+  Yi_CA <- x[[i]]$"Yi_wiCA"
+  Yi_O3 <- x[[i]]$"Yi_wiO3"
+  Y_obs <- x[[i]]$"Y_obs"
+  
+  # Compute statistics for all j in one step
+  stat <- apply(w0.true, 1, function(w) { #1 represents applying each row in W0.true
+    t.test(Yi_CA[w == -1], Yi_O3[w == 1], paired=TRUE)$statistic
+  })
+  
+  # Observed statistics (no absolute value)
+  stat_obs <- t.test(Y_obs[W_obs == -1], Y_obs[W_obs == 1], paired=TRUE)$statistic
+  
+  # Compute p-value
+  p_value <- 1*sum(stat>=stat_obs)/n
+  
+  return(p_value)
+}
+
+# Parallel execution
+cl <- makeCluster(detectCores() - 1)  # Use all but one core
+clusterExport(cl, c("x", "w0.true", "n"))  # Added "n" to the export list
+library(pbapply)
+list_p[, 1] <- pbsapply(1:a, compute_p_value, cl = cl) # each run compute_p_value(i) for different i values.
+stopCluster(cl)
+ 
+
+# confidence interval [-0.03226316, 0.0002789474]
+
+
+# visualization 
+# graphing of lower boundry (df17)
+#lower boundry 
+library(ggplot2)
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg10950028_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+
+# Assuming vectora_low and list_p_low are vectors
+df17 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
+
+ggplot(df17, aes(x = vectora_low, y = list_p_low)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect (a) for cg10950028",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+
+dev.off()
+ 
+
+#graphing of upper boundry (df18)
+
+#upper boundry 
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg10950028_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")
+library(ggplot2)
+
+# Assuming vectora_low and list_p_low are vectors
+df18 <- data.frame(vectora, list_p = list_p[,1])  # Convert to dataframe
+
+ggplot(df18, aes(x = vectora, y = list_p)) +
+  geom_point(color = "blue", size = 2, alpha = 0.6) +  # Scatter plot
+  geom_hline(yintercept = 0.025, linetype = "dashed", color = "red", size = 1) +  # Horizontal line
+  labs(
+    title = "P-values across different hypothetical constant treatment effect for cg10950028",
+    x = "Hypothetical constant treatment effect (a)",
+    y = "p-value"
+  ) +
+  theme_classic()   # Use a clean theme
+dev.off()
+ 
