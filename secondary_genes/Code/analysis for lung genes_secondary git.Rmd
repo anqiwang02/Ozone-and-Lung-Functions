@@ -30,7 +30,7 @@ final <- final_secondary_CpG
 
 #For secondary gene list
 ```{r}
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary genes/secondary gene and CPG.RData") #this data default name is df
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary_genes/secondary gene and CPG.RData") #this data default name is df
 
 row <-nrow(df)
 nrow(w0.true)
@@ -289,4 +289,19 @@ for(h in 1:row){
 
 dev.off()
 
+```
+
+
+# correlation matrix
+```{r}
+correlation_matrix <- final %>% filter(exp == -1) %>% select(c(5:287))
+corr_sec <- cor(correlation_matrix) #correlation for all secondary CpG sites
+
+#example: correlation plot for first 30 CpG sites
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/corr_sec.pdf", width = 9, height = 7, pointsize = 12, family = "Times")  
+correlation_matrix2 <- correlation_matrix %>% select(c(1:30)) #only graph the first 30 cpg sec sites
+library(corrplot)
+source("http://www.sthda.com/upload/rquery_cormat.r")
+rquery.cormat(correlation_matrix2, type="upper")
+dev.off()
 ```

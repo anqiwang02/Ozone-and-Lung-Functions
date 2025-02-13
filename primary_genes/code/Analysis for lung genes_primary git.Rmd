@@ -269,7 +269,6 @@ row <- nrow(df)
 
 # graph histogram for 12 cpg sites of gene TLR2 
 ```{r}
-#three places to replace column 11
 pdf("/Users/anqiwang/Desktop/ozone_paper_images/hist_TLR2.pdf", width = 9, height = 7, pointsize = 12, family = "Times")  
 
 colnames(final) <- trimws(colnames(final))  # Remove leading/trailing spaces
@@ -296,5 +295,73 @@ for(h in 1:row){
 dev.off()
 
 ```
+
+# correlation matrix
+```{r}
+correlation_matrix <- final %>% filter(exp == -1) %>% select(c(5:236))
+corr_prim <- cor(correlation_matrix) #correlation for all 688 variables
+
+#example: correlation plot for first 30 CpG sites
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/corr_prim.pdf", width = 9, height = 7, pointsize = 12, family = "Times")  
+correlation_matrix2 <- correlation_matrix %>% select(c(1:30))
+library(corrplot)
+source("http://www.sthda.com/upload/rquery_cormat.r")
+rquery.cormat(correlation_matrix2, type="upper")
+dev.off()
+```
+
+
+```{r}
+#primary genes 
+long_corr_prim <-  corr_prim %>% cor_gather() # long format of correlation matrix
+
+group="Primary"
+
+long_corr_prim <- long_corr_prim %>%cbind(group) #label the CpG with the group they belong to
+
+#secondary genes 
+load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary_genes/Exp_data_secondary_CpG.RData")
+correlation_matrix_sec <- final_secondary_CpG %>% filter(exp == -1) %>% select(c(5:287))
+corr_sec <- cor(correlation_matrix_sec) #correlation for all secondary CpG sites
+
+long_corr_sec <-corr_sec %>% cor_gather() # long format of correlation matrix
+
+group="Secondary"
+long_corr_sec <- long_corr_sec %>%cbind(group) #label the CpG with the group they belong to
+```
+
+
+
+```{r}
+#a table of all correlation values by groups
+
+cor_by_group <- rbind(long_corr_prim,long_corr_sec)
+
+cor_by_group <- cor_by_group %>% mutate(Sign = ifelse(cor >=0, "Positive", "Negative"))%>%rename("correlation"="cor")
+```
+
+
+# plot correlation for both primary and secondary genes
+```{r}
+library(ggplot2)
+
+library(hrbrthemes)
+library(viridis)
+
+pdf("/Users/anqiwang/Desktop/ozone_paper_images/corr_violin_plot.pdf", width = 9, height = 7, pointsize = 12, family = "Times")  
+p <- ggplot(cor_by_group, aes(x=group,y=correlation,fill=Sign))+ geom_boxplot(width=0.1)+ geom_violin(position="dodge",alpha=0.5,width=0.8,trim=TRUE)+theme_ipsum()+scale_fill_brewer(palette="Set1") + theme_classic()+xlab("Gene group")+ylab("Correlation")
+
+p
+dev.off()
+```
+
+```{r}
+long_corr_prim %>% filter(cor < 0) %>% summary(cor)
+long_corr_prim %>% filter(cor >0) %>% summary(cor)
+
+long_corr_sec %>% filter(cor < 0) %>% summary(cor)
+long_corr_sec%>% filter(cor >0) %>% summary(cor)
+```
+
 
 
