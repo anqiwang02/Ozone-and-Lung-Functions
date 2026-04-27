@@ -4,11 +4,11 @@ output: html_notebook
 ---
 
 
+
 #load library
 ```{r}
 library(dplyr)
 library(tidyr)
-library(tidyverse)
 library(writexl)
 library(readxl)
 
@@ -132,7 +132,7 @@ min <- as.data.frame(min)
 #graph 
 ```{r}
 library(esquisse)
-esquisser(min)
+#esquisser(min)
 ```
 
 #graph distribution of minimum p-values
@@ -257,6 +257,7 @@ dev.off()
 ```
 # histogram of all CpG sites of TLR2 gene in the primary gene group
 ```{r}
+library(tidyverse)
 primary_CpGs <- read_excel("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary_genes/primary gene and CPG.xlsx")
 
 df <-
@@ -312,6 +313,7 @@ dev.off()
 
 
 ```{r}
+library(rstatix)
 #primary genes 
 long_corr_prim <-  corr_prim %>% cor_gather() # long format of correlation matrix
 
@@ -362,6 +364,4 @@ long_corr_prim %>% filter(cor >0) %>% summary(cor)
 long_corr_sec %>% filter(cor < 0) %>% summary(cor)
 long_corr_sec%>% filter(cor >0) %>% summary(cor)
 ```
-
-
 
