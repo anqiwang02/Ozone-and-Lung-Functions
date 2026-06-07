@@ -1,0 +1,21 @@
+# R session/history artifacts
+.Rhistory
+.RData
+!primary_genes/.RData
+!secondary_genes/.RData
+!Data/.RData
+
+# macOS metadata
+.DS_Store
+
+# Fisher graph run outputs (date-stamped folders)
+primary_genes/code/fisher_int_prim_graph_*/
+secondary_genes/Code/fisher_int_sec_graph_*/
+
+# Graphs
+primary_genes/code/graphs/
+secondary_genes/Code/graphs/
+
+# Run logs
+primary_genes/code/logs/
+secondary_genes/Code/logs/
