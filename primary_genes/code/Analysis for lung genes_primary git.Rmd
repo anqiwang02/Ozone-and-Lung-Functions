@@ -14,13 +14,16 @@ library(readxl)
 
 library(purrr)
 
+# set working directory
+setwd(".")
+
 rm(list=ls()) 
 ```
 
 #Load data
 ```{r}
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary_genes/Exp_data_primary_CpG.RData")
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("primary_genes/Exp_data_primary_CpG.RData")
+load("Data/w0true.Rdata")
 #W0.true is a matrix that represents all possible randomizations of paired data of 17 individuals
 
 #let's call the final_primary_CpG to be final
@@ -30,42 +33,71 @@ final <- final_primary_CpG
 
 #For primary gene list
 ```{r}
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary_genes/primary gene and CPG updated.RData") #this data default name is df_primary
+load("primary_genes/primary gene and CPG updated.RData") #this data default name is df_primary
 df<-df_primary #call df_primary to be df instead
 
 df1 <- df %>% select(1) 
 
-row <-nrow(df)
+row <-nrow(df) #number of CpG sites in primary gene list
 nrow(w0.true)
 
 ```
 
-#Section 1: calculate the observed unadjusted fisher-exact p-value for primary genes
+#Section 1: calculate unadjusted fisher-exact p-values using paired |t|-statistics
 ```{r}
-test_stat <- list() #every CpG site has all possible 131072 test statistics
-ob_stat <- matrix(nrow=row, ncol=1) #every CpG only has one observed statistics; so total of row=232 number of observed statistics for primary gene list
-unadjust_p <-matrix(nrow=row, ncol=1) #every CpG site only has one p value
+pair_idx <- split(seq_len(nrow(final)), final$id2)
+n_pair <- length(pair_idx)
+n_rand <- nrow(w0.true)
 
-for(h in 1:row){ #h represents the number of cpg column values
-   test_stat[[h]] <-abs(w0.true%*%as.matrix(final[,h+4])/17)  #store all possible test statistics of each column inside a list of subjects
-  ob_stat[h,1]<-abs(t(final$exp)%*%as.matrix(final[,h+4])/17) #store observed test statistics of each column
-  unadjust_p[h,1]<-colSums((1*(sapply(seq_along(ob_stat[h,1]), function(x, y, i) y[i] <= x[,i], y = ob_stat[h,1] ,x = test_stat[[h]])))/2^17) #p-value, comparing one observed statistics (y) with the entire corresponding column of test statistics x for each CpG site
+# methylation matrix: 34 observations x row CpG sites
+Y <- as.matrix(final[, (4 + 1):(4 + row), drop = FALSE])
+
+# numerator: mean paired difference under each randomization (all CpGs at once)
+d_bar <- w0.true %*% Y / n_pair
+
+# denominator: need pair-level squared differences for s_d
+sum_D2 <- matrix(0, nrow = n_rand, ncol = row)
+for (idx in pair_idx) {
+  #for each pair, calculate the squared difference between the two subjects
+  d_p <- w0.true[, idx, drop = FALSE] %*% Y[idx, , drop = FALSE]
+  #sum the squared differences for all pairs
+  sum_D2 <- sum_D2 + d_p^2
 }
+
+s_d <- sqrt((sum_D2 - n_pair * d_bar^2) / (n_pair - 1)) # sum_D2 - n_pair * d_bar^2 equals (\sum_i (d_i-\bar d)^2) in the formula in the paper
+T_rand <- d_bar / (s_d / sqrt(n_pair))
+T_rand_abs <- abs(T_rand)
+
+# observed paired |t| for all CpGs
+d_bar_obs <- as.numeric(crossprod(final$exp, Y) / n_pair)
+
+# calculate the observed paired t for each pair 
+# d_obs is 17*232 (17 pairs of differences with 232 CpGs on the columns)
+d_obs <- t(vapply(
+  pair_idx,
+  function(idx) as.numeric(final$exp[idx] %*% Y[idx, , drop = FALSE]),
+  numeric(row)
+))
+s_d_obs <- apply(d_obs, 2, sd) # calculate the standard deviation of the differences for each CpG; 2 means column; R default uses n-1 in the denominator for sample standard deviation for sd calculation 
+T_obs_abs <- abs(d_bar_obs / (s_d_obs / sqrt(n_pair)))
+
+ob_stat <- matrix(T_obs_abs, ncol = 1) # store the observed paired |t| for all CpGs
+unadjust_p <- matrix(
+  vapply(seq_len(row), function(h) mean(T_rand_abs[, h] >= T_obs_abs[h]), numeric(1)),
+  ncol = 1
+)
+
+# store randomization statistics in list form (one vector per CpG)
+test_stat <- lapply(seq_len(row), function(h) T_rand_abs[, h])
 
 ```
 
 # Section 2: Adjust p-values by fully randomization based approach
-# calculate all the test statistics for each CpG site using the first 1000 iterations of W0 true
+# use paired |t| statistics from Section 1 (first 1000 randomizations)
 ```{r}
-#we only consider the first 1000 randomizations. Select the first n rows of w0.true (randomization matrix)
-n=1000
-w0.true1 <- w0.true[c(1:n),]
+n <- 1000
 
-test_stat1000 <- list() #every row has 1000 out of 131072 test statistics
-
-for(h in 1:row){ 
-  test_stat1000[[h]]<-abs(w0.true1%*%as.matrix(final[,h+4])/17)  #store all possible test statistics of each column inside a list of subjects
-}
+test_stat1000 <- lapply(seq_len(row), function(h) T_rand_abs[1:n, h])
 ```
 
 
@@ -110,12 +142,12 @@ min <- matrix(nrow=n, ncol=1)
 mat1<- matrix(nrow=z , ncol=1)
 mat <- list()
 
-for (i in 1:n){ #n is number of elements in each list
-   for (x in 1:z){ #z is number of lists
-   mat1[x,1] <- split_p[[x]][i] #e.g. first elements of all lists will store in one list
+for (i in 1:n){ # i = randomization 1, 2, ..., 1000
+  for (x in 1:z){ # x = CpG 1, 2, ..., 232
+  mat1[x,1] <- split_p[[x]][i] # for ith randomization, we take all 232 p-values from each of 232 CpG sites
    }
-  mat[[i]] <- mat1 #end of step 2 where we make the list from the value from the same iteration of each list 
-  min[i,1]<-min(mat[[i]]) #find the minimum of each list in mat
+  mat[[i]] <- mat1 #all 232 p-values from 232 CpGs at randomization i 
+  min[i,1]<-min(mat[[i]]) #smallest p among those 232 for ith randomization 
 }
 
 
@@ -129,13 +161,13 @@ for (i in 1:n){ #n is number of elements in each list
 min <- as.data.frame(min)
 ```
 
-#graph 
+# graph 
 ```{r}
 library(esquisse)
 #esquisser(min)
 ```
 
-#graph distribution of minimum p-values
+# graph distribution of minimum p-values
 ```{r}
 ggplot(min) +
   aes(x = V1) +
@@ -149,14 +181,14 @@ ggplot(min) +
 
 
 
-#step 3 (calculate fully randomization based adjusted p-values): calculate the adjusted p values for the observed test statistics. All observed test statistics for each hypothesis are stored in ob_stat. Find the proportion of values in matrix min (minimum p value distribution) that are less than or equal to each value in the observed test statistics for each hypothesis, then that proportion is the adjusted p value
+# step 3 (calculate fully randomization based adjusted p-values): calculate the adjusted p values for the observed test statistics. All observed test statistics for each hypothesis are stored in ob_stat. Find the proportion of values in matrix min (minimum p value distribution) that are less than or equal to each value in the observed test statistics for each hypothesis, then that proportion is the adjusted p value
 ```{r}
 # adjust p values for 232 hypothesis
 
-adjust_p <- matrix(nrow=x, ncol=1)
+adjust_p <- matrix(nrow=z, ncol=1)
 
-for (i in 1:x){
-  adjust_p[i, 1] <- 1*sum(min<=unadjust_p[i,1])/n #n is the number of values in the distribution of matrix min
+for (i in 1:z){
+  adjust_p[i, 1] <- 1*sum(min<=unadjust_p[i,1])/n #n is the number of values in the distribution of matrix min; z is the number of CpG sites in the primary gene list
 }
 
 adjust_p <- as.data.frame(adjust_p)
@@ -194,7 +226,7 @@ lung_genes_primary_results <-
   adjust_p %>% cbind(df) %>% rename(ran_based_adjust_p=V1,CpG =Illumina, gene_name = X.19) %>%cbind(unadjust_p, fdr,mean_diff)  %>% select(2,3,5,1,6,7) %>% arrange(unadjust_p)
 
 #optional: save adjusted p-value files
-write_xlsx(lung_genes_primary_results,"/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/lung_genes_primary_results.xlsx")
+write_xlsx(lung_genes_primary_results,"primary_genes/lung_genes_primary_results.xlsx")
 ```
 
 
@@ -202,7 +234,7 @@ write_xlsx(lung_genes_primary_results,"/Users/anqiwang/Documents/GitHub/Ozone-an
 # vocalno plot of primary genes' unadjusted p-values
 ```{r}
 library(ggplot2)
-lung_genes_primary_results <- read_excel("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary_genes/lung_genes_primary_results.xlsx")
+lung_genes_primary_results <- read_excel("primary_genes/lung_genes_primary_results.xlsx")
 
 minimum <- 2/(2^17)
 
@@ -211,7 +243,12 @@ ti=expression(paste("Unadjusted Fisher-exact p-values of CpG sites of primary ge
 
 label1=expression(paste(-log[10],(2/2^17))) ##
 
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/prim_vol_unadjust.pdf", width = 7, height = 5, pointsize = 12, family = "Times")
+# create a graphs folder inside the primary_genes/code folder if it doesn't exist
+if (!dir.exists("primary_genes/code/graphs")) {
+  dir.create("primary_genes/code/graphs", showWarnings = FALSE)
+}
+
+pdf("primary_genes/code/graphs/prim_vol_unadjust.pdf", width = 7, height = 5, pointsize = 12, family = "Times")
 
 volcano <- ggplot(data=lung_genes_primary_results, aes(x=mean_diff, y=-log10(unadjust_p))) + geom_point() + xlab("Average causal effect (ACE)") + ylab(vn) + xlim(-0.06, 0.06) + ylim(-0.3,5)+
 geom_hline(yintercept=-log10(minimum), col="red")+annotate("text", x=0.053, y=5, label=label1, parse=TRUE)+   geom_point(data = lung_genes_primary_results[which.min(lung_genes_primary_results$unadjust_p), ],color="red", fill="red",shape=11, size=2) + theme_classic() #ggtitle(ti)
@@ -221,7 +258,7 @@ dev.off()
 
 ```
 
-# vocalno plot of primary genes' ran-based adjusted p-values
+# volcano plot of primary genes' ran-based adjusted p-values
 ```{r}
 min2 = 0.05
 vn=expression(paste(-log[10],"(fully randomization-based adjusted p-values)"))
@@ -229,7 +266,7 @@ ti=expression(paste("Fully randomization-based adjusted p-values of CpG sites of
 
 label1=expression(paste(-log[10],(0.05))) ##
 
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/prim_vol_rand_adj.pdf", width = 7, height = 5, pointsize = 12, family = "Times")
+pdf("primary_genes/code/graphs/prim_vol_rand_adj.pdf", width = 7, height = 5, pointsize = 12, family = "Times")
 volcano2 <- ggplot(data=lung_genes_primary_results, aes(x=mean_diff, y=-log10(ran_based_adjust_p))) + geom_point() + xlab("Average causal effect (ACE)") + ylab(vn) + xlim(-0.06, 0.06) + ylim(-0.3,1.5)+
 geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, label=label1)+   geom_point(data = lung_genes_primary_results[which.min(lung_genes_primary_results$ran_based_adjust_p), ],color="red", fill="red",shape=11, size=2) +theme_classic() # ggtitle(ti)
 
@@ -240,14 +277,14 @@ dev.off()
 ```
 
 
-# vocalno plot of primary genes' FDR adjusted p-values
+# volcano plot of primary genes' FDR adjusted p-values
 ```{r}
 vn=expression(paste(-log[10],"(FDR adjusted p-values)"))
 ti=expression(paste("FDR adjusted p-values of CpG sites of primary genes"))
 
 label1=expression(paste(-log[10],(0.05))) ##
 
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/prim_vol_fdr_adj.pdf", width = 7, height = 5, pointsize = 12, family = "Times")
+pdf("primary_genes/code/graphs/prim_vol_fdr_adj.pdf", width = 7, height = 5, pointsize = 12, family = "Times")
 volcano3 <- ggplot(data=lung_genes_primary_results, aes(x=mean_diff, y=-log10(fdr_adjusted))) + geom_point() + xlab("Average causal effect (ACE)") + ylab(vn) + xlim(-0.06, 0.06) + ylim(-0.3,1.5)+
 geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, label=label1)+   geom_point(data = lung_genes_primary_results[which.min(lung_genes_primary_results$fdr_adjusted), ],color="red", fill="red",shape=11, size=2)+theme_classic() #ggtitle(ti)
 
@@ -255,10 +292,11 @@ geom_hline(yintercept=-log10(min2), col="red")+annotate("text", x=0.055, y=1.4, 
 volcano3
 dev.off()
 ```
+
 # histogram of all CpG sites of TLR2 gene in the primary gene group
 ```{r}
 library(tidyverse)
-primary_CpGs <- read_excel("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary_genes/primary gene and CPG.xlsx")
+primary_CpGs <- read_excel("primary_genes/primary gene and CPG.xlsx")
 
 df <-
   primary_CpGs %>% filter(str_detect(X.19, "TLR2")) %>% select(1, 2) 
@@ -266,11 +304,28 @@ df <-
 df 
 
 row <- nrow(df)
+
+pair_idx <- split(seq_len(nrow(final)), final$id2)
+n_pair <- length(pair_idx)
+
+paired_t_abs_for_cpg <- function(y) {
+  D <- vapply(
+    pair_idx,
+    function(idx) as.numeric(w0.true[, idx, drop = FALSE] %*% y[idx]),
+    numeric(nrow(w0.true))
+  )
+  d_bar <- rowMeans(D)
+  s_d <- sqrt((rowSums(D^2) - n_pair * d_bar^2) / (n_pair - 1))
+  T_rand_abs <- abs(d_bar / (s_d / sqrt(n_pair)))
+  d_obs <- vapply(pair_idx, function(idx) sum(final$exp[idx] * y[idx]), numeric(1))
+  T_obs_abs <- abs(mean(d_obs) / (sd(d_obs) / sqrt(n_pair)))
+  list(null = T_rand_abs, obs = T_obs_abs)
+}
 ```
 
 # graph histogram for 12 cpg sites of gene TLR2 
 ```{r}
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/hist_TLR2.pdf", width = 9, height = 7, pointsize = 12, family = "Times")  
+pdf("primary_genes/code/graphs/hist_TLR2.pdf", width = 9, height = 7, pointsize = 12, family = "Times")  
 
 colnames(final) <- trimws(colnames(final))  # Remove leading/trailing spaces
 
@@ -281,12 +336,11 @@ for(h in 1:row){
     j <- trimws(as.character(df[h,1]))  # Remove spaces
     if (j %in% names(final)) {
     #w0.true[1,]
-    mn <- which(colnames(final)==j)  
-#as.matrix(final[,mn]) #mn is the column cpg we are interested in 
-   Test_Statistics<-abs(w0.true%*%as.matrix(final[,mn])/17)  #all possible test stat
-   hist(Test_Statistics, breaks=100, main = paste("" , df[h,1]), xlab="Test statistics")
-    b<-abs(t(final$exp)%*%as.matrix(final[,mn])/17) #observed test stat
-   abline(v=b, col="red")
+    mn <- which(colnames(final)==j)
+    stats <- paired_t_abs_for_cpg(as.numeric(final[, mn]))
+    Test_Statistics <- stats$null
+    hist(Test_Statistics, breaks = 100, main = paste("", df[h, 1]), xlab = "|T_paired|")
+    abline(v = stats$obs, col = "red")
     }
     else {
       a<-NA
@@ -297,13 +351,845 @@ dev.off()
 
 ```
 
+
+# histogram of CpG sites with wider fisher intervals compared to their corresponding neymanian confidence intervals
+# such CpG sites are \emph{cg05106269} of \emph{ICAM1}, \emph{cg02680732} of \emph{MUC5B}, \emph{cg16547110} of \emph{TLR2}, and \emph{cg10950028} of \emph{GSTM1} in the primary gene group
+```{r}
+# load library 
+library(tidyverse)
+# create graph folder inside the primary_genes/code folder if it doesn't exist
+if (!dir.exists("primary_genes/code/graphs")) {
+  dir.create("primary_genes/code/graphs", showWarnings = FALSE)
+}
+colnames(final) <- trimws(colnames(final))  # Remove leading/trailing spaces
+primary_CpGs <- read_excel("primary_genes/primary gene and CPG.xlsx")
+
+if (!exists("paired_t_abs_for_cpg")) {
+  pair_idx <- split(seq_len(nrow(final)), final$id2)
+  n_pair <- length(pair_idx)
+
+  paired_t_abs_for_cpg <- function(y) {
+    D <- vapply(
+      pair_idx,
+      function(idx) as.numeric(w0.true[, idx, drop = FALSE] %*% y[idx]),
+      numeric(nrow(w0.true))
+    )
+    d_bar <- rowMeans(D)
+    s_d <- sqrt((rowSums(D^2) - n_pair * d_bar^2) / (n_pair - 1))
+    T_rand_abs <- abs(d_bar / (s_d / sqrt(n_pair)))
+    d_obs <- vapply(pair_idx, function(idx) sum(final$exp[idx] * y[idx]), numeric(1))
+    T_obs_abs <- abs(mean(d_obs) / (sd(d_obs) / sqrt(n_pair)))
+    list(null = T_rand_abs, obs = T_obs_abs)
+  }
+}
+
+```
+
+## ICAM1 cg05106269
+```{r}
+# ICAM1
+df_ICAM1 <-
+  primary_CpGs %>% filter(str_detect(X.19, "ICAM1")) %>% select(1, 2) 
+
+df_ICAM1 <- df_ICAM1 %>% filter(Illumina== "cg05106269")
+
+print(df_ICAM1[1,1])
+
+# create graph file inside the primary_genes/code/graphs folder
+pdf(file.path("primary_genes/code/graphs", "null_rand_hist_ICAM1.pdf"), width = 9, height = 7, pointsize = 12, family = "Times")  
+
+j <- trimws(as.character(df_ICAM1[1,1]))  # Remove spaces
+if (j %in% names(final)) {
+  mn <- which(colnames(final) == j)
+
+  stats <- paired_t_abs_for_cpg(as.numeric(final[, mn]))
+  Test_Statistics <- stats$null
+  df_t <- n_pair - 1
+
+  # density-scale histogram (comparable to theoretical |t| density)
+  h <- hist(Test_Statistics, breaks = 100, plot = FALSE)
+  bin_width <- diff(h$breaks)[1]
+  h$density <- h$counts / (sum(h$counts) * bin_width)
+
+  x_max <- round(max(Test_Statistics, stats$obs, qt(0.999, df = df_t)), 4)
+  x_seq <- seq(0, x_max, length.out = 1000)
+  y_asym <- 2 * dt(x_seq, df = df_t)
+  y_max <- max(c(h$density, y_asym))
+  
+  # 1. Generate clean pretty ticks based on y_max
+  y_ticks <- pretty(c(0, y_max), n = 6)
+  
+  # 2. Force the absolute maximum of those ticks to be our upper limit
+  ylim_top <- max(y_ticks)
+
+  old_mar <- par("mar")
+  par(mar = c(8, old_mar[2], old_mar[3], old_mar[4]))
+  plot(
+    h,
+    freq = FALSE,
+    main = bquote(italic("ICAM1") ~ italic(.(as.character(df_ICAM1[1,1])))),
+    xlab = "|T_paired|",
+    xlim = c(0, x_max),
+    ylab = "Density",
+    ylim = c(0, ylim_top),
+    col = "gray80",
+    border = "white",
+    xaxt = "n",
+    yaxt = "n",
+    xaxs = "i",
+    yaxs = "r",
+    cex.main = 1.5,
+    cex.lab = 1.5
+  )
+  lines(x_seq, y_asym, col = "blue", lwd = 2)
+
+  x_ticks <- pretty(c(0, x_max), n = 6)
+  x_ticks <- sort(unique(c(x_ticks[x_ticks >= 0 & x_ticks < x_max], x_max)))
+  axis(1, at = x_ticks, labels = FALSE)
+  usr <- par("usr")
+  text(
+    x = x_ticks,
+    y = usr[3] - 0.06 * diff(usr[3:4]),
+    labels = formatC(x_ticks, digits = 8, format = "fg"),
+    srt = 45,
+    adj = 1,
+    xpd = NA,
+    cex = 1.2
+  )
+
+  axis(2, at = y_ticks, las = 1, labels = formatC(y_ticks, digits = 4, format = "fg"), xpd = NA, cex.axis = 1.5)
+  box()
+  par(mar = old_mar)
+
+  abline(v = stats$obs, col = "red", lwd = 2)
+  # 1. Force R to use flat, rectangular line caps ("butt" style)
+  old_lend <- par(lend = 1)
+  legend(
+    "topright",
+    legend = c(
+      "Randomization |T_paired|",
+      bquote("Asymptotic |t|, df =" ~ .(df_t)),
+      "Observed |T_paired|"
+    ),
+    # Use lty = 1 for all items so R treats them as horizontal lines/bars
+    lty = c(1, 1, 1), 
+    col = c("gray80", "blue", "red"),
+    # Set the gray bar to be very thick (lwd = 12), while keeping others at 2
+    lwd = c(8, 2, 2), 
+    bty = "n",
+    # --- THESE PARAMETERS STRETCH THE MARKERS ---
+    seg.len = 3.5,     # Stretches the horizontal width of the legend lines/bars
+    x.intersp = 1.2,   # Adjusts text distance so it looks clean
+    y.intersp = 1.3    # Adds vertical spacing between rows
+  )
+  # Restore the original line cap style so it doesn't affect other plots
+  par(lend = old_lend)
+} else {
+  print("CpG site not found")
+}
+
+
+dev.off()
+```
+
+## may delete this lateR: ICAM1 cg05106269 (signed T, no absolute value)
+```{r}
+pdf(file.path("primary_genes/code/graphs", "null_rand_hist_ICAM1_signed.pdf"), width = 9, height = 7, pointsize = 12, family = "Times")
+
+j <- trimws(as.character(df_ICAM1[1,1]))  # Remove spaces
+if (j %in% names(final)) {
+  mn <- which(colnames(final) == j)
+  y <- as.numeric(final[, mn])
+
+  # randomization paired t-statistics (signed, not absolute)
+  D <- vapply(
+    pair_idx,
+    function(idx) as.numeric(w0.true[, idx, drop = FALSE] %*% y[idx]),
+    numeric(nrow(w0.true))
+  )
+  d_bar <- rowMeans(D)
+  s_d <- sqrt((rowSums(D^2) - n_pair * d_bar^2) / (n_pair - 1))
+  T_rand <- d_bar / (s_d / sqrt(n_pair))
+
+  # observed paired t-statistic (signed, not absolute)
+  d_obs <- vapply(pair_idx, function(idx) sum(final$exp[idx] * y[idx]), numeric(1))
+  T_obs <- mean(d_obs) / (sd(d_obs) / sqrt(n_pair))
+
+  df_t <- n_pair - 1
+  h <- hist(T_rand, breaks = 100, plot = FALSE)
+  bin_width <- diff(h$breaks)[1]
+  h$density <- h$counts / (sum(h$counts) * bin_width)
+
+  x_max <- max(abs(T_rand), abs(T_obs), qt(0.999, df = df_t))
+  x_seq <- seq(-x_max, x_max, length.out = 2000)
+  y_asym <- dt(x_seq, df = df_t)
+  y_max <- max(c(h$density, y_asym))
+  y_ticks <- pretty(c(0, y_max), n = 6)
+  ylim_top <- max(y_ticks)
+
+  old_mar <- par("mar")
+  par(mar = c(8, old_mar[2], old_mar[3], old_mar[4]))
+  plot(
+    h,
+    freq = FALSE,
+    main = bquote(italic("ICAM1") ~ italic(.(as.character(df_ICAM1[1,1]))) ~ "(signed T)"),
+    xlab = "T_paired",
+    xlim = c(-x_max, x_max),
+    ylab = "Density",
+    ylim = c(0, ylim_top),
+    col = "gray80",
+    border = "white",
+    xaxt = "n",
+    yaxt = "n",
+    xaxs = "i",
+    yaxs = "r",
+    cex.main = 1.5,
+    cex.lab = 1.5
+  )
+  lines(x_seq, y_asym, col = "blue", lwd = 2)
+
+  x_ticks <- pretty(c(-x_max, x_max), n = 7)
+  axis(1, at = x_ticks, labels = FALSE)
+  usr <- par("usr")
+  text(
+    x = x_ticks,
+    y = usr[3] - 0.06 * diff(usr[3:4]),
+    labels = formatC(x_ticks, digits = 8, format = "fg"),
+    srt = 45,
+    adj = 1,
+    xpd = NA,
+    cex = 1.2
+  )
+
+  axis(2, at = y_ticks, las = 1, labels = formatC(y_ticks, digits = 4, format = "fg"), xpd = NA, cex.axis = 1.5)
+  box()
+  par(mar = old_mar)
+
+  abline(v = T_obs, col = "red", lwd = 2)
+  old_lend <- par(lend = 1)
+  legend(
+    "topright",
+    legend = c(
+      "Randomization T_paired",
+      bquote("Asymptotic t, df =" ~ .(df_t)),
+      "Observed T_paired"
+    ),
+    lty = c(1, 1, 1),
+    col = c("gray80", "blue", "red"),
+    lwd = c(8, 2, 2),
+    bty = "n",
+    seg.len = 3.5,
+    x.intersp = 1.2,
+    y.intersp = 1.3
+  )
+  par(lend = old_lend)
+} else {
+  print("CpG site not found")
+}
+
+dev.off()
+```
+
+## MUC5B cg02680732
+```{r}
+# MUC5B
+df_MUC5B <-
+  primary_CpGs %>% filter(str_detect(X.19, "MUC5B")) %>% select(1, 2) 
+
+df_MUC5B <- df_MUC5B %>% filter(Illumina== "cg02680732")
+
+print(df_MUC5B[1,1])
+
+# create graph file inside the primary_genes/code/graphs folder
+pdf(file.path("primary_genes/code/graphs", "null_rand_hist_MUC5B.pdf"), width = 9, height = 7, pointsize = 12, family = "Times")  
+j <- trimws(as.character(df_MUC5B[1,1]))  # Remove spaces
+if (j %in% names(final)) {
+  mn <- which(colnames(final) == j)
+
+  stats <- paired_t_abs_for_cpg(as.numeric(final[, mn]))
+  Test_Statistics <- stats$null
+  df_t <- n_pair - 1
+
+  h <- hist(Test_Statistics, breaks = 100, plot = FALSE)
+  bin_width <- diff(h$breaks)[1]
+  h$density <- h$counts / (sum(h$counts) * bin_width)
+
+  x_max <- round(max(Test_Statistics, stats$obs, qt(0.999, df = df_t)), 4)
+  x_seq <- seq(0, x_max, length.out = 1000)
+  y_asym <- 2 * dt(x_seq, df = df_t)
+  y_max <- max(c(h$density, y_asym))
+  
+  # 1. Generate clean pretty ticks based on y_max
+  y_ticks <- pretty(c(0, y_max), n = 6)
+  
+  # 2. Force the absolute maximum of those ticks to be our upper limit
+  ylim_top <- max(y_ticks)
+
+  old_mar <- par("mar")
+  par(mar = c(8, old_mar[2], old_mar[3], old_mar[4]))
+  plot(
+    h,
+    freq = FALSE,
+    main = bquote(italic("MUC5B") ~ italic(.(as.character(df_MUC5B[1,1])))),
+    xlab = "|T_paired|",
+    xlim = c(0, x_max),
+    ylab = "Density",
+    ylim = c(0, ylim_top),
+    col = "gray80",
+    border = "white",
+    xaxt = "n",
+    yaxt = "n",
+    xaxs = "i",
+    yaxs = "r",
+    cex.main = 1.5,
+    cex.lab = 1.5
+  )
+  lines(x_seq, y_asym, col = "blue", lwd = 2)
+
+  x_ticks <- pretty(c(0, x_max), n = 6)
+  x_ticks <- sort(unique(c(x_ticks[x_ticks >= 0 & x_ticks < x_max], x_max)))
+  axis(1, at = x_ticks, labels = FALSE)
+  usr <- par("usr")
+  text(
+    x = x_ticks,
+    y = usr[3] - 0.06 * diff(usr[3:4]),
+    labels = formatC(x_ticks, digits = 8, format = "fg"),
+    srt = 45,
+    adj = 1,
+    xpd = NA,
+    cex = 1.2
+  )
+
+  axis(2, at = y_ticks, las = 1, labels = formatC(y_ticks, digits = 4, format = "fg"), xpd = NA, cex.axis = 1.5)
+  box()
+  par(mar = old_mar)
+
+  abline(v = stats$obs, col = "red", lwd = 2)
+  old_lend <- par(lend = 1)
+  legend(
+    "topright",
+    legend = c(
+      "Randomization |T_paired|",
+      bquote("Asymptotic |t|, df =" ~ .(df_t)),
+      "Observed |T_paired|"
+    ),
+    lty = c(1, 1, 1),
+    col = c("gray80", "blue", "red"),
+    lwd = c(8, 2, 2),
+    bty = "n",
+    seg.len = 3.5,
+    x.intersp = 1.2,
+    y.intersp = 1.3
+  )
+  par(lend = old_lend)
+} else {
+  print("CpG site not found")
+}
+
+dev.off()
+```
+
+## TLR2 cg16547110
+```{r}
+# TLR2
+df_TLR2 <-
+  primary_CpGs %>% filter(str_detect(X.19, "TLR2")) %>% select(1, 2) 
+
+df_TLR2 <- df_TLR2 %>% filter(Illumina== "cg16547110")
+
+print(df_TLR2[1,1])
+
+# create graph file inside the primary_genes/code/graphs folder
+pdf(file.path("primary_genes/code/graphs", "null_rand_hist_TLR2.pdf"), width = 9, height = 7, pointsize = 12, family = "Times")  
+j <- trimws(as.character(df_TLR2[1,1]))  # Remove spaces
+if (j %in% names(final)) {
+  mn <- which(colnames(final) == j)
+
+  stats <- paired_t_abs_for_cpg(as.numeric(final[, mn]))
+  Test_Statistics <- stats$null
+  df_t <- n_pair - 1
+
+  h <- hist(Test_Statistics, breaks = 100, plot = FALSE)
+  bin_width <- diff(h$breaks)[1]
+  h$density <- h$counts / (sum(h$counts) * bin_width)
+
+  x_max <- round(max(Test_Statistics, stats$obs, qt(0.999, df = df_t)), 4)
+  x_seq <- seq(0, x_max, length.out = 1000)
+  y_asym <- 2 * dt(x_seq, df = df_t)
+  y_max <- max(c(h$density, y_asym))
+  
+  # 1. Generate clean pretty ticks based on y_max
+  y_ticks <- pretty(c(0, y_max), n = 6)
+  
+  # 2. Force the absolute maximum of those ticks to be our upper limit
+  ylim_top <- max(y_ticks)
+  # --- FIX END ---
+
+  old_mar <- par("mar")
+  par(mar = c(8, old_mar[2], old_mar[3], old_mar[4]))
+  plot(
+    h,
+    freq = FALSE,
+    main = bquote(italic("TLR2") ~ italic(.(as.character(df_TLR2[1,1])))),
+    xlab = "|T_paired|",
+    xlim = c(0, x_max),
+    ylab = "Density",
+    ylim = c(0, ylim_top),
+    col = "gray80",
+    border = "white",
+    xaxt = "n",
+    yaxt = "n",
+    xaxs = "i",
+    yaxs = "r",             # Change back to "r" so R leaves padding at the top for text
+    cex.main = 1.5,
+    cex.lab = 1.5
+  )
+  lines(x_seq, y_asym, col = "blue", lwd = 2)
+
+  x_ticks <- pretty(c(0, x_max), n = 6)
+  x_ticks <- sort(unique(c(x_ticks[x_ticks >= 0 & x_ticks < x_max], x_max)))
+  axis(1, at = x_ticks, labels = FALSE)
+  usr <- par("usr")
+  text(
+    x = x_ticks,
+    y = usr[3] - 0.06 * diff(usr[3:4]),
+    labels = formatC(x_ticks, digits = 8, format = "fg"),
+    srt = 45,
+    adj = 1,
+    xpd = NA,
+    cex = 1.2
+  )
+
+  axis(2, at = y_ticks, las = 1, labels = formatC(y_ticks, digits = 4, format = "fg"), xpd = NA, cex.axis = 1.5)
+  box()
+  par(mar = old_mar)
+
+  abline(v = stats$obs, col = "red", lwd = 2)
+  old_lend <- par(lend = 1)
+  legend(
+    "topright",
+    legend = c(
+      "Randomization |T_paired|",
+      bquote("Asymptotic |t|, df =" ~ .(df_t)),
+      "Observed |T_paired|"
+    ),
+    lty = c(1, 1, 1),
+    col = c("gray80", "blue", "red"),
+    lwd = c(8, 2, 2),
+    bty = "n",
+    seg.len = 3.5,
+    x.intersp = 1.2,
+    y.intersp = 1.3
+  )
+  par(lend = old_lend)
+} else {
+  print("CpG site not found")
+}
+
+dev.off()
+```
+
+
+## GSTM1 cg10950028
+```{r}
+# GSTM1
+df_GSTM1 <-
+  primary_CpGs %>% filter(str_detect(X.19, "GSTM1")) %>% select(1, 2) 
+
+df_GSTM1 <- df_GSTM1 %>% filter(Illumina== "cg10950028")
+
+print(df_GSTM1[1,1])
+
+# create graph file inside the primary_genes/code/graphs folder
+pdf(file.path("primary_genes/code/graphs", "null_rand_hist_GSTM1.pdf"), width = 9, height = 7, pointsize = 12, family = "Times")  
+j <- trimws(as.character(df_GSTM1[1,1]))  # Remove spaces
+if (j %in% names(final)) {
+  mn <- which(colnames(final) == j)
+
+  stats <- paired_t_abs_for_cpg(as.numeric(final[, mn]))
+  Test_Statistics <- stats$null
+  df_t <- n_pair - 1
+
+  h <- hist(Test_Statistics, breaks = 100, plot = FALSE)
+  bin_width <- diff(h$breaks)[1]
+  h$density <- h$counts / (sum(h$counts) * bin_width)
+
+  x_max <- round(max(Test_Statistics, stats$obs, qt(0.999, df = df_t)), 4)
+  x_seq <- seq(0, x_max, length.out = 1000)
+  y_asym <- 2 * dt(x_seq, df = df_t)
+  y_max <- max(c(h$density, y_asym))
+  
+  # 1. Generate clean pretty ticks based on y_max
+  y_ticks <- pretty(c(0, y_max), n = 6)
+  
+  # 2. Force the absolute maximum of those ticks to be our upper limit
+  ylim_top <- max(y_ticks)
+
+  old_mar <- par("mar")
+  par(mar = c(8, old_mar[2], old_mar[3], old_mar[4]))
+  plot(
+    h,
+    freq = FALSE,
+    main = bquote(italic("GSTM1") ~ italic(.(as.character(df_GSTM1[1,1])))),
+    xlab = "|T_paired|",
+    xlim = c(0, x_max),
+    ylab = "Density",
+    ylim = c(0, ylim_top),
+    col = "gray80",
+    border = "white",
+    xaxt = "n",
+    yaxt = "n",
+    xaxs = "i",
+    yaxs = "r",
+    cex.main = 1.5,
+    cex.lab = 1.5
+  )
+  lines(x_seq, y_asym, col = "blue", lwd = 2)
+
+  x_ticks <- pretty(c(0, x_max), n = 6)
+  x_ticks <- sort(unique(c(x_ticks[x_ticks >= 0 & x_ticks < x_max], x_max)))
+  axis(1, at = x_ticks, labels = FALSE)
+  usr <- par("usr")
+  text(
+    x = x_ticks,
+    y = usr[3] - 0.06 * diff(usr[3:4]),
+    labels = formatC(x_ticks, digits = 8, format = "fg"),
+    srt = 45,
+    adj = 1,
+    xpd = NA,
+    cex = 1.2
+  )
+
+  axis(2, at = y_ticks, las = 1, labels = formatC(y_ticks, digits = 4, format = "fg"), xpd = NA, cex.axis = 1.5)
+  box()
+  par(mar = old_mar)
+
+  abline(v = stats$obs, col = "red", lwd = 2)
+  old_lend <- par(lend = 1)
+  legend(
+    "topright",
+    legend = c(
+      "Randomization |T_paired|",
+      bquote("Asymptotic |t|, df =" ~ .(df_t)),
+      "Observed |T_paired|"
+    ),
+    lty = c(1, 1, 1),
+    col = c("gray80", "blue", "red"),
+    lwd = c(8, 2, 2),
+    bty = "n",
+    seg.len = 3.5,
+    x.intersp = 1.2,
+    y.intersp = 1.3
+  )
+  par(lend = old_lend)
+} else {
+  print("CpG site not found")
+}
+
+dev.off()
+```
+
+## MUC5B cg02680732 (signed T, no absolute value)
+```{r}
+pdf(file.path("primary_genes/code/graphs", "null_rand_hist_MUC5B_signed.pdf"), width = 9, height = 7, pointsize = 12, family = "Times")
+
+j <- trimws(as.character(df_MUC5B[1,1]))  # Remove spaces
+if (j %in% names(final)) {
+  mn <- which(colnames(final) == j)
+  y <- as.numeric(final[, mn])
+
+  # randomization paired t-statistics (signed, not absolute)
+  D <- vapply(
+    pair_idx,
+    function(idx) as.numeric(w0.true[, idx, drop = FALSE] %*% y[idx]),
+    numeric(nrow(w0.true))
+  )
+  d_bar <- rowMeans(D)
+  s_d <- sqrt((rowSums(D^2) - n_pair * d_bar^2) / (n_pair - 1))
+  T_rand <- d_bar / (s_d / sqrt(n_pair))
+
+  # observed paired t-statistic (signed, not absolute)
+  d_obs <- vapply(pair_idx, function(idx) sum(final$exp[idx] * y[idx]), numeric(1))
+  T_obs <- mean(d_obs) / (sd(d_obs) / sqrt(n_pair))
+
+  df_t <- n_pair - 1
+  h <- hist(T_rand, breaks = 100, plot = FALSE)
+  bin_width <- diff(h$breaks)[1]
+  h$density <- h$counts / (sum(h$counts) * bin_width)
+
+  x_max <- max(abs(T_rand), abs(T_obs), qt(0.999, df = df_t))
+  x_seq <- seq(-x_max, x_max, length.out = 2000)
+  y_asym <- dt(x_seq, df = df_t)
+  y_max <- max(c(h$density, y_asym))
+  y_ticks <- pretty(c(0, y_max), n = 6)
+  ylim_top <- max(y_ticks)
+
+  old_mar <- par("mar")
+  par(mar = c(8, old_mar[2], old_mar[3], old_mar[4]))
+  plot(
+    h,
+    freq = FALSE,
+    main = bquote(italic("MUC5B") ~ italic(.(as.character(df_MUC5B[1,1]))) ~ "(signed T)"),
+    xlab = "T_paired",
+    xlim = c(-x_max, x_max),
+    ylab = "Density",
+    ylim = c(0, ylim_top),
+    col = "gray80",
+    border = "white",
+    xaxt = "n",
+    yaxt = "n",
+    xaxs = "i",
+    yaxs = "r",
+    cex.main = 1.5,
+    cex.lab = 1.5
+  )
+  lines(x_seq, y_asym, col = "blue", lwd = 2)
+
+  x_ticks <- pretty(c(-x_max, x_max), n = 7)
+  axis(1, at = x_ticks, labels = FALSE)
+  usr <- par("usr")
+  text(
+    x = x_ticks,
+    y = usr[3] - 0.06 * diff(usr[3:4]),
+    labels = formatC(x_ticks, digits = 8, format = "fg"),
+    srt = 45,
+    adj = 1,
+    xpd = NA,
+    cex = 1.2
+  )
+
+  axis(2, at = y_ticks, las = 1, labels = formatC(y_ticks, digits = 4, format = "fg"), xpd = NA, cex.axis = 1.5)
+  box()
+  par(mar = old_mar)
+
+  abline(v = T_obs, col = "red", lwd = 2)
+  old_lend <- par(lend = 1)
+  legend(
+    "topright",
+    legend = c(
+      "Randomization T_paired",
+      bquote("Asymptotic t, df =" ~ .(df_t)),
+      "Observed T_paired"
+    ),
+    lty = c(1, 1, 1),
+    col = c("gray80", "blue", "red"),
+    lwd = c(8, 2, 2),
+    bty = "n",
+    seg.len = 3.5,
+    x.intersp = 1.2,
+    y.intersp = 1.3
+  )
+  par(lend = old_lend)
+} else {
+  print("CpG site not found")
+}
+
+dev.off()
+```
+
+## TLR2 cg16547110 (signed T, no absolute value)
+```{r}
+pdf(file.path("primary_genes/code/graphs", "null_rand_hist_TLR2_signed.pdf"), width = 9, height = 7, pointsize = 12, family = "Times")
+
+j <- trimws(as.character(df_TLR2[1,1]))  # Remove spaces
+if (j %in% names(final)) {
+  mn <- which(colnames(final) == j)
+  y <- as.numeric(final[, mn])
+
+  # randomization paired t-statistics (signed, not absolute)
+  D <- vapply(
+    pair_idx,
+    function(idx) as.numeric(w0.true[, idx, drop = FALSE] %*% y[idx]),
+    numeric(nrow(w0.true))
+  )
+  d_bar <- rowMeans(D)
+  s_d <- sqrt((rowSums(D^2) - n_pair * d_bar^2) / (n_pair - 1))
+  T_rand <- d_bar / (s_d / sqrt(n_pair))
+
+  # observed paired t-statistic (signed, not absolute)
+  d_obs <- vapply(pair_idx, function(idx) sum(final$exp[idx] * y[idx]), numeric(1))
+  T_obs <- mean(d_obs) / (sd(d_obs) / sqrt(n_pair))
+
+  df_t <- n_pair - 1
+  h <- hist(T_rand, breaks = 100, plot = FALSE)
+  bin_width <- diff(h$breaks)[1]
+  h$density <- h$counts / (sum(h$counts) * bin_width)
+
+  x_max <- max(abs(T_rand), abs(T_obs), qt(0.999, df = df_t))
+  x_seq <- seq(-x_max, x_max, length.out = 2000)
+  y_asym <- dt(x_seq, df = df_t)
+  y_max <- max(c(h$density, y_asym))
+  y_ticks <- pretty(c(0, y_max), n = 6)
+  ylim_top <- max(y_ticks)
+
+  old_mar <- par("mar")
+  par(mar = c(8, old_mar[2], old_mar[3], old_mar[4]))
+  plot(
+    h,
+    freq = FALSE,
+    main = bquote(italic("TLR2") ~ italic(.(as.character(df_TLR2[1,1]))) ~ "(signed T)"),
+    xlab = "T_paired",
+    xlim = c(-x_max, x_max),
+    ylab = "Density",
+    ylim = c(0, ylim_top),
+    col = "gray80",
+    border = "white",
+    xaxt = "n",
+    yaxt = "n",
+    xaxs = "i",
+    yaxs = "r",
+    cex.main = 1.5,
+    cex.lab = 1.5
+  )
+  lines(x_seq, y_asym, col = "blue", lwd = 2)
+
+  x_ticks <- pretty(c(-x_max, x_max), n = 7)
+  axis(1, at = x_ticks, labels = FALSE)
+  usr <- par("usr")
+  text(
+    x = x_ticks,
+    y = usr[3] - 0.06 * diff(usr[3:4]),
+    labels = formatC(x_ticks, digits = 8, format = "fg"),
+    srt = 45,
+    adj = 1,
+    xpd = NA,
+    cex = 1.2
+  )
+
+  axis(2, at = y_ticks, las = 1, labels = formatC(y_ticks, digits = 4, format = "fg"), xpd = NA, cex.axis = 1.5)
+  box()
+  par(mar = old_mar)
+
+  abline(v = T_obs, col = "red", lwd = 2)
+  old_lend <- par(lend = 1)
+  legend(
+    "topright",
+    legend = c(
+      "Randomization T_paired",
+      bquote("Asymptotic t, df =" ~ .(df_t)),
+      "Observed T_paired"
+    ),
+    lty = c(1, 1, 1),
+    col = c("gray80", "blue", "red"),
+    lwd = c(8, 2, 2),
+    bty = "n",
+    seg.len = 3.5,
+    x.intersp = 1.2,
+    y.intersp = 1.3
+  )
+  par(lend = old_lend)
+} else {
+  print("CpG site not found")
+}
+
+dev.off()
+```
+
+## GSTM1 cg10950028 (signed T, no absolute value)
+```{r}
+pdf(file.path("primary_genes/code/graphs", "null_rand_hist_GSTM1_signed.pdf"), width = 9, height = 7, pointsize = 12, family = "Times")
+
+j <- trimws(as.character(df_GSTM1[1,1]))  # Remove spaces
+if (j %in% names(final)) {
+  mn <- which(colnames(final) == j)
+  y <- as.numeric(final[, mn])
+
+  # randomization paired t-statistics (signed, not absolute)
+  D <- vapply(
+    pair_idx,
+    function(idx) as.numeric(w0.true[, idx, drop = FALSE] %*% y[idx]),
+    numeric(nrow(w0.true))
+  )
+  d_bar <- rowMeans(D)
+  s_d <- sqrt((rowSums(D^2) - n_pair * d_bar^2) / (n_pair - 1))
+  T_rand <- d_bar / (s_d / sqrt(n_pair))
+
+  # observed paired t-statistic (signed, not absolute)
+  d_obs <- vapply(pair_idx, function(idx) sum(final$exp[idx] * y[idx]), numeric(1))
+  T_obs <- mean(d_obs) / (sd(d_obs) / sqrt(n_pair))
+
+  df_t <- n_pair - 1
+  h <- hist(T_rand, breaks = 100, plot = FALSE)
+  bin_width <- diff(h$breaks)[1]
+  h$density <- h$counts / (sum(h$counts) * bin_width)
+
+  x_max <- max(abs(T_rand), abs(T_obs), qt(0.999, df = df_t))
+  x_seq <- seq(-x_max, x_max, length.out = 2000)
+  y_asym <- dt(x_seq, df = df_t)
+  y_max <- max(c(h$density, y_asym))
+  y_ticks <- pretty(c(0, y_max), n = 6)
+  ylim_top <- max(y_ticks)
+
+  old_mar <- par("mar")
+  par(mar = c(8, old_mar[2], old_mar[3], old_mar[4]))
+  plot(
+    h,
+    freq = FALSE,
+    main = bquote(italic("GSTM1") ~ italic(.(as.character(df_GSTM1[1,1]))) ~ "(signed T)"),
+    xlab = "T_paired",
+    xlim = c(-x_max, x_max),
+    ylab = "Density",
+    ylim = c(0, ylim_top),
+    col = "gray80",
+    border = "white",
+    xaxt = "n",
+    yaxt = "n",
+    xaxs = "i",
+    yaxs = "r",
+    cex.main = 1.5,
+    cex.lab = 1.5
+  )
+  lines(x_seq, y_asym, col = "blue", lwd = 2)
+
+  x_ticks <- pretty(c(-x_max, x_max), n = 7)
+  axis(1, at = x_ticks, labels = FALSE)
+  usr <- par("usr")
+  text(
+    x = x_ticks,
+    y = usr[3] - 0.06 * diff(usr[3:4]),
+    labels = formatC(x_ticks, digits = 8, format = "fg"),
+    srt = 45,
+    adj = 1,
+    xpd = NA,
+    cex = 1.2
+  )
+
+  axis(2, at = y_ticks, las = 1, labels = formatC(y_ticks, digits = 4, format = "fg"), xpd = NA, cex.axis = 1.5)
+  box()
+  par(mar = old_mar)
+
+  abline(v = T_obs, col = "red", lwd = 2)
+  old_lend <- par(lend = 1)
+  legend(
+    "topright",
+    legend = c(
+      "Randomization T_paired",
+      bquote("Asymptotic t, df =" ~ .(df_t)),
+      "Observed T_paired"
+    ),
+    lty = c(1, 1, 1),
+    col = c("gray80", "blue", "red"),
+    lwd = c(8, 2, 2),
+    bty = "n",
+    seg.len = 3.5,
+    x.intersp = 1.2,
+    y.intersp = 1.3
+  )
+  par(lend = old_lend)
+} else {
+  print("CpG site not found")
+}
+
+dev.off()
+```
+
 # correlation matrix
 ```{r}
-correlation_matrix <- final %>% filter(exp == -1) %>% select(c(5:236))
+correlation_matrix <- final %>% filter(exp == -1) %>% select(c(5:236)) # keep only rows with clean air condition 
 corr_prim <- cor(correlation_matrix) #correlation for all 688 variables
 
 #example: correlation plot for first 30 CpG sites
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/corr_prim.pdf", width = 9, height = 7, pointsize = 12, family = "Times")  
+pdf("primary_genes/code/graphs/corr_prim.pdf", width = 9, height = 7, pointsize = 12, family = "Times")  
 correlation_matrix2 <- correlation_matrix %>% select(c(1:30))
 library(corrplot)
 source("http://www.sthda.com/upload/rquery_cormat.r")
@@ -322,7 +1208,7 @@ group="Primary"
 long_corr_prim <- long_corr_prim %>%cbind(group) #label the CpG with the group they belong to
 
 #secondary genes 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary_genes/Exp_data_secondary_CpG.RData")
+load("secondary_genes/Exp_data_secondary_CpG.RData")
 correlation_matrix_sec <- final_secondary_CpG %>% filter(exp == -1) %>% select(c(5:287))
 corr_sec <- cor(correlation_matrix_sec) #correlation for all secondary CpG sites
 
@@ -350,7 +1236,7 @@ library(ggplot2)
 library(hrbrthemes)
 library(viridis)
 
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/corr_violin_plot.pdf", width = 9, height = 7, pointsize = 12, family = "Times")  
+pdf("primary_genes/code/graphs/corr_violin_plot.pdf", width = 9, height = 7, pointsize = 12, family = "Times")  
 p <- ggplot(cor_by_group, aes(x=group,y=correlation,fill=Sign))+ geom_boxplot(width=0.1)+ geom_violin(position="dodge",alpha=0.5,width=0.8,trim=TRUE)+theme_ipsum()+scale_fill_brewer(palette="Set1") + theme_classic()+xlab("Gene group")+ylab("Correlation")
 
 p

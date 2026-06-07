@@ -12,9 +12,11 @@ library(writexl)
 #clear the environment
 rm(list=ls()) 
 
-#replace the paths to your local path
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary_genes/Exp_data_primary_CpG.RData")
-primary_results <- read_excel("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary_genes/lung_genes_primary_results.xlsx")
+# set working directory to project root for reproducibility
+setwd(".")
+
+load("primary_genes/Exp_data_primary_CpG.RData")
+primary_results <- read_excel("primary_genes/lung_genes_primary_results.xlsx")
 
 alpha = 0.05
 ```
@@ -49,7 +51,7 @@ for(h in 1:n){ #h represents the number of cpg column values
 
 CI_neyman_primary <- CpG %>% cbind(CI) %>% as.data.frame() %>% rename(lower_bound=V2, upper_bound=V3) %>% mutate(lower_bound=as.numeric(lower_bound)) %>% mutate(upper_bound=as.numeric(upper_bound)) 
 
-write_xlsx(CI_neyman_primary,"/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary_genes/top9_95CI_primary.xlsx")
+write_xlsx(CI_neyman_primary,"primary_genes/top9_95CI_primary.xlsx")
 
 #option rounding: CI_neyman_primary[1:9, 2:3] <- round(CI_neyman_primary[1:9, 2:3], digits = 4)
 

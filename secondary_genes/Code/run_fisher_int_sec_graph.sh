@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# Usage: bash secondary_genes/Code/run_fisher_int_sec_graph.sh
-# This script runs fisher_int_sec_graph.R locally.
+# Usage:
+#   bash secondary_genes/Code/run_fisher_int_sec_graph.sh
+#   FISHER_N_CORES=12 bash secondary_genes/Code/run_fisher_int_sec_graph.sh
+# This script runs fisher_int_sec_graph.R and writes logs to secondary_genes/Code/logs.
 
 set -euo pipefail
 
@@ -10,8 +12,8 @@ R_SCRIPT="${SCRIPT_DIR}/fisher_int_sec_graph.R"
 LOG_DIR="${SCRIPT_DIR}/logs"
 LOG_FILE="${LOG_DIR}/fisher_int_sec_graph_$(date +%Y-%m-%d_%H%M%S).log"
 
-# If the R script supports this env var, it will use 10 workers.
-export FISHER_N_CORES=10
+# Allow override from environment; default to 10 workers.
+export FISHER_N_CORES="${FISHER_N_CORES:-10}"
 
 mkdir -p "${LOG_DIR}"
 cd "${SCRIPT_DIR}"

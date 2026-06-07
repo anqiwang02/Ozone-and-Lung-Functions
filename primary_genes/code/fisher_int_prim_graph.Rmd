@@ -11,9 +11,16 @@ library(tidyr)
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary_genes/Exp_data_primary_CpG.RData")
+# set working directory to project root for reproducibility
+setwd(".")
+graph_dir <- "primary_genes/code/graphs"
+if (!dir.exists(graph_dir)) {
+  dir.create(graph_dir, recursive = TRUE, showWarnings = FALSE)
+}
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("primary_genes/Exp_data_primary_CpG.RData")
+
+load("Data/w0true.Rdata")
 ```
 
 # Example 1: cg03610073 of TLR2. Effect size= -0.018702
@@ -184,7 +191,7 @@ stopCluster(cl)
 # visualization 
 # graphing of lower boundry (df1)
 ```{r}
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg03610073_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+pdf(file.path(graph_dir, "cg03610073_fish_int_low.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
 
 #lower boundry 
 library(ggplot2)
@@ -207,7 +214,7 @@ dev.off()
 ```
 #graphing of upper boundry (df2)
 ```{r}
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg03610073_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+pdf(file.path(graph_dir, "cg03610073_fish_int_low.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
 #upper boundry 
 library(ggplot2)
 
@@ -397,7 +404,7 @@ stopCluster(cl)
 # visualization 
 # graphing of lower boundry (df3)
 ```{r}
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg18652319_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+pdf(file.path(graph_dir, "cg18652319_fish_int_low.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
 
 #lower boundry 
 library(ggplot2)
@@ -421,7 +428,7 @@ dev.off()
 
 #graphing of upper boundry cg18652319 (df4)
 ```{r}
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg18652319_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+pdf(file.path(graph_dir, "cg18652319_fish_int_low.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
 
 #upper boundry 
 library(ggplot2)
@@ -616,7 +623,7 @@ stopCluster(cl)
 ```{r}
 #lower boundry 
 library(ggplot2)
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg03995486_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+pdf(file.path(graph_dir, "cg03995486_fish_int_low.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
 
 # Assuming vectora_low and list_p_low are vectors
 df5 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
@@ -637,7 +644,7 @@ dev.off()
 #graphing of upper boundry (df6)
 ```{r}
 #upper boundry 
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg03995486_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")
+pdf(file.path(graph_dir, "cg03995486_fish_int_up.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")
 library(ggplot2)
 
 # Assuming vectora_low and list_p_low are vectors
@@ -824,7 +831,7 @@ stopCluster(cl)
 ```{r}
 #lower boundry 
 library(ggplot2)
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg01133890_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+pdf(file.path(graph_dir, "cg01133890_fish_int_low.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
 
 # Assuming vectora_low and list_p_low are vectors
 df7 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
@@ -845,7 +852,7 @@ dev.off()
 #graphing of upper boundry (df8)
 ```{r}
 #upper boundry 
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg01133890_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")
+pdf(file.path(graph_dir, "cg01133890_fish_int_up.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")
 library(ggplot2)
 
 # Assuming vectora_low and list_p_low are vectors
@@ -1034,7 +1041,7 @@ stopCluster(cl)
 ```{r}
 #lower boundry 
 library(ggplot2)
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg05106269_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+pdf(file.path(graph_dir, "cg05106269_fish_int_low.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
 
 # Assuming vectora_low and list_p_low are vectors
 df9 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
@@ -1055,7 +1062,7 @@ dev.off()
 #graphing of upper boundry (df10)
 ```{r}
 #upper boundry 
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg05106269_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")
+pdf(file.path(graph_dir, "cg05106269_fish_int_up.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")
 library(ggplot2)
 
 # Assuming vectora_low and list_p_low are vectors
@@ -1244,7 +1251,7 @@ stopCluster(cl)
 ```{r}
 #lower boundry 
 library(ggplot2)
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg00087425_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+pdf(file.path(graph_dir, "cg00087425_fish_int_low.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
 
 # Assuming vectora_low and list_p_low are vectors
 df11 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
@@ -1265,7 +1272,7 @@ dev.off()
 #graphing of upper boundry (df12)
 ```{r}
 #upper boundry 
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg00087425_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")
+pdf(file.path(graph_dir, "cg00087425_fish_int_up.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")
 library(ggplot2)
 
 # Assuming vectora_low and list_p_low are vectors
@@ -1454,7 +1461,7 @@ stopCluster(cl)
 ```{r}
 #lower boundry 
 library(ggplot2)
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg02680732_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+pdf(file.path(graph_dir, "cg02680732_fish_int_low.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
 
 # Assuming vectora_low and list_p_low are vectors
 df13 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
@@ -1475,7 +1482,7 @@ dev.off()
 #graphing of upper boundry (df14)
 ```{r}
 #upper boundry 
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg02680732_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")
+pdf(file.path(graph_dir, "cg02680732_fish_int_up.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")
 library(ggplot2)
 
 # Assuming vectora_low and list_p_low are vectors
@@ -1667,7 +1674,7 @@ stopCluster(cl)
 ```{r}
 #lower boundry 
 library(ggplot2)
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg16547110_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+pdf(file.path(graph_dir, "cg16547110_fish_int_low.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
 
 # Assuming vectora_low and list_p_low are vectors
 df15 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
@@ -1688,7 +1695,7 @@ dev.off()
 #graphing of upper boundry (df16)
 ```{r}
 #upper boundry 
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg16547110_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")
+pdf(file.path(graph_dir, "cg16547110_fish_int_up.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")
 library(ggplot2)
 
 # Assuming vectora_low and list_p_low are vectors
@@ -1878,7 +1885,7 @@ stopCluster(cl)
 ```{r}
 #lower boundry 
 library(ggplot2)
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg10950028_fish_int_low.pdf", width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
+pdf(file.path(graph_dir, "cg10950028_fish_int_low.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")  # Specify the file name
 
 # Assuming vectora_low and list_p_low are vectors
 df17 <- data.frame(vectora_low, list_p_low = list_p_low[,1])  # Convert to dataframe
@@ -1899,7 +1906,7 @@ dev.off()
 #graphing of upper boundry (df18)
 ```{r}
 #upper boundry 
-pdf("/Users/anqiwang/Desktop/ozone_paper_images/cg10950028_fish_int_up.pdf", width = 8, height = 6, pointsize = 12, family = "Times")
+pdf(file.path(graph_dir, "cg10950028_fish_int_up.pdf"), width = 8, height = 6, pointsize = 12, family = "Times")
 library(ggplot2)
 
 # Assuming vectora_low and list_p_low are vectors

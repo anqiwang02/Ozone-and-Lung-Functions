@@ -11,9 +11,12 @@ library(tidyr)
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary_genes/Exp_data_primary_CpG.RData")
+# set working directory to project root for reproducibility
+setwd(".")
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("primary_genes/Exp_data_primary_CpG.RData")
+
+load("Data/w0true.Rdata")
 ```
 
 # Example 1: cg03610073 of TLR2. Effect size= -0.018702
@@ -228,9 +231,9 @@ abline(h=0.025)
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+load("primary_genes/Exp_data_primary_CpG.RData")
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("Data/w0true.Rdata")
 
 mn <- which(colnames(final_primary_CpG)=="cg18652319")   #provide the column number for the CpG site 
 
@@ -409,9 +412,9 @@ abline(h=0.025)
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+load("primary_genes/Exp_data_primary_CpG.RData")
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("Data/w0true.Rdata")
 
 mn <- which(colnames(final_primary_CpG)=="cg03995486")   #provide the column number for the CpG site 
 
@@ -588,9 +591,9 @@ abline(h=0.025)
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+load("primary_genes/Exp_data_primary_CpG.RData")
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("Data/w0true.Rdata")
 
 mn <- which(colnames(final_primary_CpG)=="cg01133890")   #provide the column number for the CpG site 
 
@@ -767,9 +770,9 @@ abline(h=0.025)
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+load("primary_genes/Exp_data_primary_CpG.RData")
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("Data/w0true.Rdata")
 
 mn <- which(colnames(final_primary_CpG)=="cg05106269")   #provide the column number for the CpG site 
 
@@ -945,9 +948,9 @@ abline(h=0.025)
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+load("primary_genes/Exp_data_primary_CpG.RData")
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("Data/w0true.Rdata")
 
 mn <- which(colnames(final_primary_CpG)=="cg00087425")   #provide the column number for the CpG site 
 
@@ -1125,9 +1128,9 @@ abline(h=0.025)
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+load("primary_genes/Exp_data_primary_CpG.RData")
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("Data/w0true.Rdata")
 
 mn <- which(colnames(final_primary_CpG)=="cg02680732")   #provide the column number for the CpG site 
 
@@ -1306,9 +1309,9 @@ abline(h=0.025)
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+load("primary_genes/Exp_data_primary_CpG.RData")
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("Data/w0true.Rdata")
 
 mn <- which(colnames(final_primary_CpG)=="cg16547110")   #provide the column number for the CpG site 
 
@@ -1487,9 +1490,9 @@ abline(h=0.025)
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/primary genes/Exp_data_primary_CpG.RData")
+load("primary_genes/Exp_data_primary_CpG.RData")
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("Data/w0true.Rdata")
 
 mn <- which(colnames(final_primary_CpG)=="cg10950028")   #provide the column number for the CpG site 
 

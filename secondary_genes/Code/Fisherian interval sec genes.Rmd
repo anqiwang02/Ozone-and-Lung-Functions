@@ -8,9 +8,12 @@ output: html_notebook
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary genes/Exp_data_secondary_CpG.RData")
+# set working directory to project root for reproducibility
+setwd(".")
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("secondary_genes/Exp_data_secondary_CpG.RData")
+
+load("Data/w0true.Rdata")
 
 mn <- which(colnames(final_secondary_CpG)=="cg12662193")   #provide the column number for the CpG site 
 
@@ -189,9 +192,9 @@ abline(h=0.025)
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary genes/Exp_data_secondary_CpG.RData")
+load("secondary_genes/Exp_data_secondary_CpG.RData")
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("Data/w0true.Rdata")
 
 mn <- which(colnames(final_secondary_CpG)=="cg19869469")   #provide the column number for the CpG site 
 
@@ -370,9 +373,9 @@ abline(h=0.025)
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary genes/Exp_data_secondary_CpG.RData")
+load("secondary_genes/Exp_data_secondary_CpG.RData")
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("Data/w0true.Rdata")
 
 mn <- which(colnames(final_secondary_CpG)=="cg14795253")   #provide the column number for the CpG site 
 
@@ -551,9 +554,9 @@ abline(h=0.025)
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary genes/Exp_data_secondary_CpG.RData")
+load("secondary_genes/Exp_data_secondary_CpG.RData")
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("Data/w0true.Rdata")
 
 mn <- which(colnames(final_secondary_CpG)=="cg08301503")   #provide the column number for the CpG site 
 
@@ -731,9 +734,9 @@ abline(h=0.025)
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary genes/Exp_data_secondary_CpG.RData")
+load("secondary_genes/Exp_data_secondary_CpG.RData")
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("Data/w0true.Rdata")
 
 mn <- which(colnames(final_secondary_CpG)=="cg01392313")   #provide the column number for the CpG site 
 

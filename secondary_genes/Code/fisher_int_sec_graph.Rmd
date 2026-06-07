@@ -9,9 +9,9 @@ output: html_notebook
 #clear the environment
 rm(list=ls()) 
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/secondary_genes/Exp_data_secondary_CpG.RData")
+load("secondary_genes/Exp_data_secondary_CpG.RData")
 
-load("/Users/anqiwang/Documents/GitHub/Ozone-and-Lung-Functions/Data/w0true.Rdata")
+load("Data/w0true.Rdata")
 
 mn <- which(colnames(final_secondary_CpG)=="cg12662193")   #provide the column number for the CpG site 
 
